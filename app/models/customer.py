@@ -35,13 +35,6 @@ class CustomerDB(Base):
     proof_image_filename = Column(String(255), nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
-    @property
-    def proof_image_key(self):
-        """Generate the storage key for the proof image"""
-        if self.proof_image_filename:
-            return f"customer_proofs/{self.id}/{self.proof_image_filename}"
-        return None
-
     @classmethod
     def get_all_customers(cls, session):
         return session.query(cls).all()
