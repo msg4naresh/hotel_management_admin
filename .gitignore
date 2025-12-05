@@ -1,4 +1,44 @@
-hotel-venv
+# Virtual environments
+venv/
+hotel-venv/
+env/
+ENV/
+.venv
+
+# Python
 *.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-.idea
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Database
+*.sqlite
+*.sqlite3
+postgres_data/
