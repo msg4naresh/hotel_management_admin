@@ -8,7 +8,7 @@ from app.db.base_db import get_db
 from app.models.schemas.auth import TokenData
 from app.models.users import UserDB
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
 
 
 def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_db)) -> UserDB:

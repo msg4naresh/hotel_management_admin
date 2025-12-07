@@ -1,9 +1,15 @@
-from pydantic_settings import BaseSettings
+from typing import List, Union
+
+from pydantic import AnyHttpUrl, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # API Settings
     API_V1_STR: str = "/api/v1"
+    PROJECT_NAME: str = "Hotel Management Admin"
+    # CORS
+    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
 
     # Security (SECRET_KEY required in production, has dev default)
     SECRET_KEY: str = "DEV-KEY-INSECURE-CHANGE-IN-PRODUCTION"
@@ -31,6 +37,11 @@ class Settings(BaseSettings):
 
     # Testing flag
     TESTING: bool = False  # Default to production mode
+
+    @computed_field
+    @property
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        return f"postgresql+psycopg2://{self.PG_USERNAME}:{self.PG_PASSWORD}@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DB}?options=-csearch_path%3D{self.PG_SCHEMA}"
 
     class Config:
         env_file = ".env"
