@@ -1,6 +1,6 @@
 import boto3
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class S3Service:
         Returns:
             S3 object key
         """
-        timestamp_ms = int(datetime.utcnow().timestamp() * 1000)
+        timestamp_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         return f"customer_proofs/{customer_id}/{timestamp_ms}_{filename}"
 
     def generate_s3_url(self, s3_key: str) -> str:

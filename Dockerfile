@@ -1,17 +1,21 @@
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim
+# Use the latest Python runtime (3.14.1)
+# Features: Free-threaded mode, JIT compiler, t-strings, improved performance
+FROM python:3.14-slim
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies for python-magic and file handling
+# Install system dependencies for python-magic
 RUN apt-get update && apt-get install -y libmagic1 && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container at /app
-COPY requirements.txt .
+# Install UV for fast dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy dependency files and README (required by hatchling build system)
+COPY pyproject.toml README.md ./
+
+# Install production dependencies only (no dev dependencies)
+RUN uv sync --no-dev
 
 # Copy the rest of the application's code
 COPY . .
@@ -20,4 +24,5 @@ COPY . .
 EXPOSE 8080
 
 # Run the application using uvicorn
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+# Note: Health checks handled by Cloud Run, no HEALTHCHECK needed
+CMD exec uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT}

@@ -42,3 +42,20 @@ logs/
 *.sqlite
 *.sqlite3
 postgres_data/
+test.db
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+test-results/
+coverage.xml
+
+# Security reports
+bandit-report.json
+
+# IDE/Artifacts
+*.egg-info/
+dist/
+build/

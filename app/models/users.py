@@ -1,37 +1,35 @@
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from app.models.base import Base
 from pydantic import BaseModel, field_validator
-
 from sqlalchemy.orm import Session
-from typing import  List
-from passlib.context import CryptContext
+from app.core import security
 
 
+def _utcnow():
+    return datetime.now(timezone.utc)
 
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class UserDB(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
     def verify_password(self, plain_password: str) -> bool:
-        return pwd_context.verify(plain_password, self.hashed_password)
+        return security.verify_password(plain_password, self.hashed_password)
 
     @staticmethod
     def hash_password(password: str) -> str:
-        return pwd_context.hash(password)
+        return security.get_password_hash(password)
 
     @classmethod
-    def get_all_users(cls, session: Session) -> List["UserDB"]:
+    def get_all_users(cls, session: Session) -> list["UserDB"]:
         return session.query(cls).all()
 
 

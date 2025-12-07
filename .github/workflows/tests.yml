@@ -1,0 +1,185 @@
+name: Tests & Quality Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.14']
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install UV
+      uses: astral-sh/setup-uv@v2
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'uv'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libmagic1
+
+    - name: Install Python dependencies with UV
+      run: uv sync
+
+    - name: Lint with Ruff
+      run: |
+        uv run ruff check app tests --show-source
+      continue-on-error: true
+
+    - name: Format check with Black
+      run: |
+        uv run black --check app tests
+      continue-on-error: true
+
+    - name: Type check with MyPy
+      run: |
+        uv run mypy app --ignore-missing-imports
+      continue-on-error: true
+
+    - name: Run unit tests
+      run: |
+        uv run pytest tests/unit/ -v --tb=short
+
+    - name: Run integration tests
+      run: |
+        uv run pytest tests/integration/ -v --tb=short
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+    - name: Run end-to-end tests
+      run: |
+        uv run pytest tests/e2e/ -v --tb=short
+
+    - name: Run all tests with coverage
+      run: |
+        uv run pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Generate coverage report
+      if: always()
+      run: |
+        pytest tests/ --cov=app --cov-report=html --cov-report=term-missing
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+    - name: Archive coverage report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: htmlcov/
+
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install UV
+      uses: astral-sh/setup-uv@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.14'
+        cache: 'uv'
+
+    - name: Install dependencies
+      run: uv sync
+
+    - name: Run security checks with Bandit
+      run: |
+        uv run bandit -r app -f json -o bandit-report.json
+      continue-on-error: true
+
+    - name: Run Semgrep security analysis
+      run: |
+        uv run semgrep --config=p/security-audit app/
+      continue-on-error: true
+
+    - name: Archive security report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: bandit-report.json
+
+  migrations:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install UV
+      uses: astral-sh/setup-uv@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.14'
+        cache: 'uv'
+
+    - name: Install dependencies with UV
+      run: uv sync
+
+    - name: Run Alembic migrations
+      run: |
+        uv run alembic upgrade head
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+    - name: Verify migration integrity
+      run: |
+        uv run alembic current
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db

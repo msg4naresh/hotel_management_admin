@@ -1,6 +1,6 @@
-from functools import lru_cache
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status
 from botocore.exceptions import ClientError
+from datetime import datetime, timezone
 
 from app.models.users import UserDB
 from app.models.customer import CustomerDB
@@ -8,23 +8,12 @@ from app.models.schemas.file_upload import FileUploadResponse, DocumentDeleteRes
 from app.api.dependencies.auth_deps import get_current_user
 from app.db.base_db import get_session
 from app.services.s3_service import S3Service
-from app.services.file_validator import FileValidator
-from app.core.config import settings
+from app.services import file_validator
+from app.services.s3_cleanup import delete_old_file_best_effort
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=1)
-def get_s3_service() -> S3Service:
-    """Get or create singleton S3Service instance"""
-    return S3Service()
-
-
-def get_file_validator() -> FileValidator:
-    """Create FileValidator with configured max file size"""
-    return FileValidator(max_file_size=settings.MAX_FILE_SIZE)
 
 
 @router.post(
@@ -39,7 +28,6 @@ async def upload_document(
     document_type: str = Form(...),
     file: UploadFile = File(...),
     current_user: UserDB = Depends(get_current_user),
-    validator: FileValidator = Depends(get_file_validator),
 ):
     """
     Upload a document for a customer to S3 and store the URL in the database.
@@ -48,23 +36,23 @@ async def upload_document(
     - **document_type**: Type of document (e.g., "passport", "license")
     - **file**: The document file to upload (PDF or JPG)
     """
-    s3_service = get_s3_service()
+    s3_service = S3Service()
 
     try:
-        # Read file content
+        # 1. Read and validate file content
         file_content = await file.read()
-
-        # Validate file (will raise ValueError with specific reason)
-        safe_filename, extension, content_type = validator.validate_file(
+        safe_filename, extension, content_type = file_validator.validate_file(
             file.filename or "document", file_content
         )
 
-        # Get session and verify customer exists with row-level lock
+        # 2. Single transaction: validate customer, upload file, update database
+        old_s3_key = None
         with get_session() as session:
+            # Lock customer row for update
             customer = (
                 session.query(CustomerDB)
                 .filter(CustomerDB.id == customer_id)
-                .with_for_update()  # Pessimistic locking to prevent race conditions
+                .with_for_update()
                 .first()
             )
 
@@ -74,9 +62,16 @@ async def upload_document(
                     detail=f"Customer with ID {customer_id} not found",
                 )
 
-            # Upload to S3
+            # Track old file for cleanup (best effort after transaction)
+            if customer.proof_image_url:
+                try:
+                    old_s3_key = s3_service.get_s3_key_from_url(customer.proof_image_url)
+                except ValueError:
+                    logger.warning(f"Invalid old S3 URL: {customer.proof_image_url}")
+
+            # Upload new file to S3 (within transaction lock)
             try:
-                s3_url = s3_service.upload_file(
+                new_s3_url = s3_service.upload_file(
                     file_content, safe_filename, customer_id, content_type
                 )
             except ClientError as e:
@@ -86,27 +81,33 @@ async def upload_document(
                     detail="File upload service temporarily unavailable",
                 )
 
-            # Update customer record with file URL (atomic with lock)
-            customer.proof_image_url = s3_url
+            # Update customer record
+            customer.proof_image_url = new_s3_url
             customer.proof_image_filename = safe_filename
+            customer.uploaded_at = datetime.now(timezone.utc)
+            uploaded_at = customer.uploaded_at
+
             session.commit()
 
-            logger.info(
-                f"Document uploaded successfully. Customer: {customer_id}, File: {safe_filename}"
-            )
+        # 3. Best-effort cleanup of old file (after successful commit)
+        if old_s3_key:
+            delete_old_file_best_effort(s3_service, old_s3_key)
 
-            return FileUploadResponse(
-                customer_id=customer_id,
-                file_url=s3_url,
-                file_name=safe_filename,
-                uploaded_at=customer.uploaded_at,
-                document_type=document_type,
-            )
+        logger.info(
+            f"Document uploaded successfully. Customer: {customer_id}, File: {safe_filename}"
+        )
+
+        return FileUploadResponse(
+            customer_id=customer_id,
+            file_url=new_s3_url,
+            file_name=safe_filename,
+            uploaded_at=uploaded_at,
+            document_type=document_type,
+        )
 
     except HTTPException:
-        raise  # Re-raise HTTP errors
+        raise
     except ValueError as e:
-        # File validation errors
         logger.warning(f"File validation failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -136,15 +137,16 @@ async def delete_document(
 
     - **customer_id**: ID of the customer whose document to delete
     """
-    s3_service = get_s3_service()
+    s3_service = S3Service()
 
     try:
+        # 1. Single transaction: get customer, extract S3 key, clear record
+        s3_key = None
         with get_session() as session:
-            # Get customer with row-level lock to prevent concurrent modifications
             customer = (
                 session.query(CustomerDB)
                 .filter(CustomerDB.id == customer_id)
-                .with_for_update()  # Pessimistic locking
+                .with_for_update()
                 .first()
             )
 
@@ -160,7 +162,7 @@ async def delete_document(
                     detail=f"No document found for customer {customer_id}",
                 )
 
-            # Extract S3 key from URL and delete from S3
+            # Extract S3 key while holding lock
             try:
                 s3_key = s3_service.get_s3_key_from_url(customer.proof_image_url)
             except ValueError as e:
@@ -170,33 +172,27 @@ async def delete_document(
                     detail="Invalid stored document URL",
                 )
 
-            # Delete from S3
-            try:
-                s3_service.delete_file(s3_key)
-            except ClientError as e:
-                logger.error(f"AWS S3 error deleting document: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="File deletion service temporarily unavailable",
-                )
-
-            # Clear customer record (atomic with lock)
+            # Clear customer record
             customer.proof_image_url = None
             customer.proof_image_filename = None
             session.commit()
 
-            logger.info(
-                f"Document deleted successfully. Customer: {customer_id}, Key: {s3_key}"
-            )
+        # 2. Best-effort cleanup (after successful commit)
+        if s3_key:
+            delete_old_file_best_effort(s3_service, s3_key)
 
-            return DocumentDeleteResponse(
-                success=True,
-                message="Document deleted successfully",
-                customer_id=customer_id,
-            )
+        logger.info(
+            f"Document deleted successfully. Customer: {customer_id}, Key: {s3_key}"
+        )
+
+        return DocumentDeleteResponse(
+            success=True,
+            message="Document deleted successfully",
+            customer_id=customer_id,
+        )
 
     except HTTPException:
-        raise  # Re-raise HTTP errors
+        raise
     except Exception as e:
         logger.exception(f"Unexpected error deleting document for customer {customer_id}")
         raise HTTPException(

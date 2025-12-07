@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
 from app.models.customer import CustomerResponse, CustomerCreate, CustomerDB
 from app.models.users import UserDB
 from app.api.dependencies.auth_deps import get_current_user
@@ -7,8 +6,8 @@ from app.db.base_db import get_session
 
 router = APIRouter()
 
-@router.get("/customers", 
-         response_model=List[CustomerResponse],
+@router.get("/customers",
+         response_model=list[CustomerResponse],
          summary="Get all customers",
          description="Retrieve a list of all customers")
 def get_customers(current_user: UserDB = Depends(get_current_user)):

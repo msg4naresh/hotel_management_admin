@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.db.init_db import init_db
 from app.api.routes import api_router
+from app.core.logging import setup_logging
+
+# Initialize logging
+setup_logging()
 
 app = FastAPI(
     title="RS Residency API",
@@ -17,7 +21,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 # Initialize database tables
 init_db()
 
+
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to RS Residency!"} 
-
+    return {"message": "Welcome to RS Residency!"}

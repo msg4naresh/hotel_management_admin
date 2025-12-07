@@ -1,8 +1,12 @@
 from sqlalchemy import Column, Integer, String, Float, JSON, DateTime
 from app.models.base import Base
 from pydantic import BaseModel, Field
-from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
+
 
 class CustomerBase(BaseModel):
     name: str
@@ -10,8 +14,8 @@ class CustomerBase(BaseModel):
     phone: str
     address: str
     proof_of_identity: str
-    proof_image_url: Optional[str] = None
-    proof_image_filename: Optional[str] = None
+    proof_image_url: str | None = None
+    proof_image_filename: str | None = None
 
     class Config:
         from_attributes = True
@@ -33,7 +37,7 @@ class CustomerDB(Base):
     proof_of_identity = Column(String(200), nullable=False)
     proof_image_url = Column(String(500), nullable=True)
     proof_image_filename = Column(String(255), nullable=True)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=_utcnow)
 
     @classmethod
     def get_all_customers(cls, session):

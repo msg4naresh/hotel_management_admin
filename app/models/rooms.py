@@ -2,7 +2,6 @@ from sqlalchemy import Column, Integer, String, Float, JSON
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 from pydantic import BaseModel, Field
-from typing import List, Optional
 
 class RoomBase(BaseModel):
     name: str
@@ -10,7 +9,7 @@ class RoomBase(BaseModel):
     floor: int
     capacity: int
     price_per_night: float
-    amenities: List[str]
+    amenities: list[str]
 
     class Config:
         from_attributes = True

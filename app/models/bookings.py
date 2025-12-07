@@ -1,38 +1,42 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from sqlalchemy import Column, Integer, ForeignKey, Date, DateTime, String, Numeric
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 from pydantic import BaseModel, field_validator
 from app.models.enums import BookingStatus, PaymentStatus
-from typing import List, Optional
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
+
 
 class BookingDB(Base):
     __tablename__ = "bookings"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     room_id = Column(Integer, ForeignKey("rooms.id"))
     customer_id = Column(Integer, ForeignKey("customers.id"))
-    
+
     # Booking dates
     scheduled_check_in = Column(Date)    # Original planned check-in
     scheduled_check_out = Column(Date)   # Original planned check-out
     actual_check_in = Column(DateTime, nullable=True)    # Actual check-in time
     actual_check_out = Column(DateTime, nullable=True)   # Actual check-out time
-    
+
     # Status tracking
     booking_status = Column(String, default=BookingStatus.PREBOOKED.value)
     payment_status = Column(String, default=PaymentStatus.PENDING.value)
-    
+
     # Payment tracking
     total_amount = Column(Numeric(10, 2))
     amount_paid = Column(Numeric(10, 2), default=0)
-    
+
     # Additional charges (for late check-out etc.)
     additional_charges = Column(Numeric(10, 2), default=0)
     notes = Column(String, nullable=True)
-    
-    booking_date = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    booking_date = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     
     # Relationships
     room = relationship("RoomDB")
@@ -75,7 +79,7 @@ class BookingCreate(BaseModel):
     total_amount: float
     amount_paid: float
     additional_charges: float
-    notes: Optional[str]
+    notes: str | None
 
     @field_validator('scheduled_check_in')
     @classmethod
@@ -114,14 +118,14 @@ class BookingResponse(BaseModel):
     customer_id: int
     scheduled_check_in: date
     scheduled_check_out: date
-    actual_check_in: Optional[datetime]
-    actual_check_out: Optional[datetime]
+    actual_check_in: datetime | None
+    actual_check_out: datetime | None
     booking_status: str
     payment_status: str
     total_amount: float
     amount_paid: float
     additional_charges: float
-    notes: Optional[str]
+    notes: str | None
     booking_date: datetime
 
     class Config:

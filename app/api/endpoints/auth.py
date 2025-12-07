@@ -5,9 +5,10 @@ from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.users import UserDB, UserCreate, UserResponse
 from app.db.base_db import get_session
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
-from typing import List
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -43,11 +44,10 @@ def login(user_credentials: OAuth2PasswordRequestForm = Depends()):
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception(f"Login error for user {user_credentials.username}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
-        
-        
+            detail="Login failed"
         )
     
 
@@ -65,7 +65,7 @@ def register_user(user: UserCreate):
                     detail="Username already taken"
                 )
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             db_user = UserDB(
                 username=user.username,
                 hashed_password=UserDB.hash_password(user.password),
@@ -85,8 +85,8 @@ def register_user(user: UserCreate):
             detail=f"Failed to create user: {str(e)}"
         )
 
-@router.get("/users", 
-         response_model=List[UserResponse],
+@router.get("/users",
+         response_model=list[UserResponse],
          summary="Get all users",
          description="Retrieve a list of all registered users")
 def get_users():
@@ -95,7 +95,7 @@ def get_users():
             users = session.query(UserDB).all()
             return users
     except Exception as e:
-        logging.error(f"Error retrieving users: {str(e)}")
+        logger.exception("Error retrieving users")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve users"

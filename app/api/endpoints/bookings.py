@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.bookings import BookingResponse, BookingCreate, BookingDB
 from app.models.rooms import RoomDB
 from app.models.customer import CustomerDB
@@ -8,13 +7,16 @@ from app.models.users import UserDB
 from app.models.enums import BookingStatus
 from app.api.dependencies.auth_deps import get_current_user
 from app.db.base_db import get_session
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 
 @router.get("/bookings", 
-         response_model=List[BookingResponse],
+         response_model=list[BookingResponse],
          summary="Get all bookings",
          description="Retrieve a list of all bookings")
 def get_bookings(current_user: UserDB = Depends(get_current_user)):
@@ -82,80 +84,95 @@ def create_booking(
             detail=f"Failed to create booking: {str(e)}"
         )
 
-@router.post("/bookings/{booking_id}/check-in")
+@router.patch("/bookings/{booking_id}/check-in")
 def check_in(
     booking_id: int,
     current_user: UserDB = Depends(get_current_user)
 ):
     try:
         with get_session() as session:
-            
-            booking = session.query(BookingDB).filter(BookingDB.id == booking_id).first()
-            
+            booking = session.query(BookingDB).filter(
+                BookingDB.id == booking_id
+            ).with_for_update().first()
+
             if not booking:
                 raise HTTPException(status_code=404, detail="Booking not found")
-            
-            
-            
-            booking.actual_check_in = datetime.utcnow()
+
+            booking.actual_check_in = datetime.now(timezone.utc)
             booking.booking_status = BookingStatus.CHECKED_IN
             session.commit()
-            
-            return {"message": "Check-in successful"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/bookings/{booking_id}/check-out")
+            return {"message": "Check-in successful"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error checking in booking {booking_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check in"
+        )
+
+@router.patch("/bookings/{booking_id}/check-out")
 def check_out(
     booking_id: int,
     current_user: UserDB = Depends(get_current_user)
 ):
     try:
         with get_session() as session:
-           
-            booking = session.query(BookingDB).filter(BookingDB.id == booking_id).first()
-            
+            booking = session.query(BookingDB).filter(
+                BookingDB.id == booking_id
+            ).with_for_update().first()
+
             if not booking:
                 raise HTTPException(status_code=404, detail="Booking not found")
-            
-            current_time = datetime.utcnow()
-            booking.actual_check_out = current_time
-            
-            # Calculate any additional charges
-            
-            
+
+            booking.actual_check_out = datetime.now(timezone.utc)
             booking.booking_status = BookingStatus.CHECKED_OUT
             session.commit()
-            
+
             return {
                 "message": "Check-out successful",
-                "additional_charges": "vds"
+                "additional_charges": float(booking.additional_charges)
             }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception(f"Error checking out booking {booking_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check out"
+        )
 
-@router.post("/bookings/{booking_id}/cancel")
+@router.patch("/bookings/{booking_id}/cancel")
 def cancel_booking(
     booking_id: int,
     current_user: UserDB = Depends(get_current_user)
 ):
     try:
         with get_session() as session:
-            booking = session.query(BookingDB).filter(BookingDB.id == booking_id).first()
-            
+            booking = session.query(BookingDB).filter(
+                BookingDB.id == booking_id
+            ).with_for_update().first()
+
             if not booking:
                 raise HTTPException(status_code=404, detail="Booking not found")
-            
+
             if booking.booking_status not in [BookingStatus.PENDING, BookingStatus.CONFIRMED]:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail="Cannot cancel booking in current status"
                 )
-            
+
             booking.booking_status = BookingStatus.CANCELLED
             session.commit()
-            
+
             return {"message": "Booking cancelled successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception(f"Error cancelling booking {booking_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel booking"
+        )
 

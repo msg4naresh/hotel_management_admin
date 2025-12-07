@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
 from app.models.rooms import RoomResponse, RoomCreate, RoomDB
 from app.models.users import UserDB
 from app.api.dependencies.auth_deps import get_current_user
 from app.db.base_db import get_session
 import logging
-from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get("/rooms", response_model=List[RoomResponse], 
+@router.get("/rooms", response_model=list[RoomResponse],
          summary="Get all rooms",
          description="Retrieve a list of all available rooms")
 def get_rooms(current_user: UserDB = Depends(get_current_user)):
@@ -18,7 +18,11 @@ def get_rooms(current_user: UserDB = Depends(get_current_user)):
             rooms = RoomDB.get_all_rooms(session)
             return rooms
     except Exception as e:
-        logging.error(e)
+        logger.exception("Error retrieving rooms")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve rooms"
+        )
 
 @router.post("/create-room", 
           response_model=RoomResponse,
