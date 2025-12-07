@@ -25,4 +25,5 @@ EXPOSE 8080
 
 # Run the application using uvicorn
 # Note: Health checks handled by Cloud Run, no HEALTHCHECK needed
-CMD exec uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+# Run pre-start script to verify DB connectivity, then start the app
+CMD uv run python backend_pre_start.py && exec uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT}

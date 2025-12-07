@@ -3,7 +3,8 @@ import logging
 from fastapi import APIRouter, status
 
 from app.api.dependencies.common import CurrentUserDep, SessionDep
-from app.models.rooms import RoomCreate, RoomDB, RoomResponse
+from app.crud import room as crud_room
+from app.models.rooms import RoomCreate, RoomResponse
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ router = APIRouter()
     description="Retrieve a list of all available rooms",
 )
 def get_rooms(current_user: CurrentUserDep, session: SessionDep):
-    rooms = session.query(RoomDB).all()
+    rooms = crud_room.get_multi(session)
     return rooms
 
 
@@ -29,8 +30,4 @@ def get_rooms(current_user: CurrentUserDep, session: SessionDep):
     description="Create a new room with the provided details",
 )
 def create_room(room: RoomCreate, current_user: CurrentUserDep, session: SessionDep):
-    db_room = RoomDB(**room.model_dump())
-    session.add(db_room)
-    session.commit()
-    session.refresh(db_room)
-    return db_room
+    return crud_room.create(session, obj_in=room)

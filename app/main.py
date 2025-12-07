@@ -10,6 +10,23 @@ from app.core.logging import setup_logging
 # Initialize logging
 setup_logging()
 
+# Initialize Sentry for error tracking (only if DSN is configured)
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        traces_sample_rate=1.0 if settings.ENVIRONMENT == "development" else 0.1,
+        profiles_sample_rate=1.0 if settings.ENVIRONMENT == "development" else 0.1,
+        integrations=[
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+        ],
+    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

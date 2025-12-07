@@ -1,7 +1,7 @@
-from typing import List, Union
+from typing import List
 
 from pydantic import AnyHttpUrl, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -38,7 +38,11 @@ class Settings(BaseSettings):
     # Testing flag
     TESTING: bool = False  # Default to production mode
 
-    @computed_field
+    # Sentry (Error Tracking)
+    SENTRY_DSN: str = ""  # Only initializes if set
+    ENVIRONMENT: str = "development"  # development, staging, production
+
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         return f"postgresql+psycopg2://{self.PG_USERNAME}:{self.PG_PASSWORD}@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DB}?options=-csearch_path%3D{self.PG_SCHEMA}"

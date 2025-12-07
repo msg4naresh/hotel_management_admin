@@ -1,8 +1,28 @@
 # Hotel Management System - Admin API
 
-FastAPI-based backend API for managing hotel rooms, customers, bookings, and document uploads with PostgreSQL and AWS S3.
+Enterprise-grade FastAPI backend for hotel management with PostgreSQL, AWS S3, and production-ready features.
 
-## Quick Start
+## ✨ Features
+
+- **🔐 Authentication**: JWT-based OAuth2 authentication with secure password hashing
+- **🏨 Room Management**: CRUD operations for hotel rooms
+- **👥 Customer Management**: Customer records with document uploads to S3
+- **📅 Booking Management**: Reservations, check-ins, check-outs, payment tracking
+- **📄 Document Storage**: AWS S3 integration with file validation
+- **🗄️ Database**: PostgreSQL with Alembic migrations
+- **🔍 Monitoring**: Sentry integration for error tracking
+- **🏥 Health Checks**: Liveness and readiness probes
+- **🧪 Testing**: Comprehensive unit and integration tests
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.14+
+- PostgreSQL 17
+- [UV](https://github.com/astral-sh/uv) (recommended) or pip
+
+### Installation
 
 ```bash
 # Install UV (fast Python package manager)
@@ -11,6 +31,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install dependencies
 uv sync
 
+# Create initial admin user (optional)
+uv run python initial_data.py
+
 # Run database migrations
 uv run alembic upgrade head
 
@@ -18,17 +41,24 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-Visit http://localhost:8000/docs for interactive API documentation.
+Visit **http://localhost:8000/api/v1/docs** for interactive API documentation.
 
-## Docker Deployment
+## 🐳 Docker Deployment
 
 ```bash
+# Start all services (app + PostgreSQL)
 docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
 ```
 
-Access at http://localhost:8050
+Access at **http://localhost:8050/api/v1/docs**
 
-## Testing
+## 🧪 Testing
 
 ```bash
 # Run all tests
@@ -38,36 +68,78 @@ uv run pytest tests/ -v
 uv run pytest tests/ --cov=app --cov-report=html
 
 # Run specific test types
-uv run pytest tests/unit/ -v           # Unit tests
-uv run pytest tests/integration/ -v    # Integration tests
+uv run pytest tests/unit/ -v           # Unit tests only
+uv run pytest tests/integration/ -v    # Integration tests only
 ```
 
-## Core Features
+## 🏗️ Architecture
 
-- **Authentication**: JWT-based admin authentication
-- **Room Management**: Create and list hotel rooms
-- **Customer Management**: Manage customer records with document uploads
-- **Booking Management**: Handle reservations, check-ins, check-outs
-- **Document Storage**: AWS S3 integration for customer proof documents
-- **Database**: PostgreSQL with Alembic migrations
+### Tech Stack
 
-## Tech Stack
+| Component | Technology | Version |
+|-----------|-----------|---------|
+| **Framework** | FastAPI | 0.115+ |
+| **Language** | Python | 3.14 |
+| **Database** | PostgreSQL | 17 |
+| **ORM** | SQLAlchemy | 2.0+ |
+| **Migrations** | Alembic | 1.14+ |
+| **Storage** | AWS S3 | boto3 1.35+ |
+| **Auth** | JWT | python-jose 3.3+ |
+| **Testing** | pytest | 8.0+ |
+| **Linting** | Ruff | 0.8+ |
+| **Type Checking** | MyPy | 1.12+ |
+| **Monitoring** | Sentry | 1.40+ |
 
-- **FastAPI** 0.120+ - Modern async web framework
-- **PostgreSQL** 17 - Database
-- **Python** 3.14 - With free-threaded mode + JIT
-- **SQLAlchemy** 2.0+ - ORM
-- **Alembic** - Database migrations
-- **AWS S3** - Document storage (via boto3)
-- **UV** - Fast Python package manager
-- **pytest** 8.0+ - Testing framework
+### Project Structure
 
-## API Endpoints
+```
+hotel_management_admin/
+├── app/
+│   ├── main.py                 # FastAPI app + Sentry integration
+│   ├── api/
+│   │   ├── routes.py           # Central router
+│   │   ├── dependencies/       # Dependency injection
+│   │   └── endpoints/          # API endpoints by resource
+│   ├── core/
+│   │   ├── config.py           # Settings (Pydantic)
+│   │   ├── security.py         # JWT + password hashing
+│   │   └── logging.py          # Structured JSON logging
+│   ├── crud/                   # 🆕 Repository pattern
+│   │   ├── base.py             # Generic CRUD base class
+│   │   ├── crud_user.py        # User operations
+│   │   └── crud_room.py        # Room operations
+│   ├── models/                 # SQLAlchemy models
+│   │   ├── users.py
+│   │   ├── rooms.py
+│   │   ├── bookings.py
+│   │   ├── customer.py
+│   │   └── schemas/            # Pydantic schemas
+│   ├── services/               # Business logic
+│   │   ├── s3_service.py       # S3 operations
+│   │   ├── file_validator.py  # File validation
+│   │   └── s3_cleanup.py       # Cleanup utilities
+│   └── db/                     # Database setup
+│       ├── base_db.py          # Engine + session
+│       └── postgres_db.py      # Connection URI
+├── tests/
+│   ├── conftest.py             # Pytest fixtures
+│   ├── unit/                   # Unit tests
+│   └── integration/            # Integration tests
+├── alembic/                    # Database migrations
+├── backend_pre_start.py        # 🆕 DB health check script
+├── initial_data.py             # 🆕 Seed admin user
+├── pyproject.toml              # Dependencies + config
+└── docker-compose.yml          # Docker setup
+```
+
+## 📡 API Endpoints
 
 All endpoints prefixed with `/api/v1`:
 
 ### Authentication
-- `POST /auth/login` - Login and get JWT token
+- `POST /auth/token` - Login (OAuth2 compatible)
+- `POST /auth/register` - Register new user
+- `GET /auth/users` - List all users (protected)
 
 ### Rooms
 - `GET /rooms` - List all rooms
@@ -82,16 +154,60 @@ All endpoints prefixed with `/api/v1`:
 - `POST /create-booking` - Create booking
 - `PATCH /bookings/{id}/check-in` - Check-in guest
 - `PATCH /bookings/{id}/check-out` - Check-out guest
+- `PATCH /bookings/{id}/cancel` - Cancel booking
 
 ### Documents
-- `POST /upload-document/{customer_id}` - Upload customer document to S3
-- `DELETE /documents/{customer_id}` - Delete customer document
+- `POST /upload-document/{customer_id}` - Upload to S3
+- `DELETE /documents/{customer_id}` - Delete from S3
 
 ### Health
 - `GET /health` - Liveness probe
-- `GET /health/ready` - Readiness probe (checks database)
+- `GET /health/ready` - Readiness probe (checks DB)
 
-## Development
+## ⚙️ Configuration
+
+Create a `.env` file:
+
+```bash
+# API
+PROJECT_NAME="Hotel Management Admin"
+API_V1_STR="/api/v1"
+ENVIRONMENT="development"  # development, staging, production
+
+# Database
+PG_HOST=localhost
+PG_PORT=5432
+PG_USERNAME=postgres
+PG_PASSWORD=postgres
+PG_DB=hotel_management
+PG_SCHEMA=public
+
+# Security
+SECRET_KEY=your-secret-key-change-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# AWS S3
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_S3_BUCKET_NAME=hotel-management-uploads
+AWS_S3_REGION=us-east-1
+
+# File Upload
+MAX_FILE_SIZE=10485760  # 10MB
+ALLOWED_FILE_TYPES=["application/pdf", "image/jpeg", "image/png"]
+
+# Monitoring (optional)
+SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+
+# CORS (optional)
+BACKEND_CORS_ORIGINS=["http://localhost:3000"]
+
+# Server
+PORT=8000
+```
+
+## 🛠️ Development
 
 ### Code Quality
 
@@ -99,11 +215,11 @@ All endpoints prefixed with `/api/v1`:
 # Format code
 uv run ruff format app/ tests/
 
-# Lint
+# Lint and auto-fix
 uv run ruff check --fix app/ tests/
 
-# Type check
-uv run mypy app/
+# Type check (pragmatic config for SQLAlchemy)
+uv run python -m mypy app/
 ```
 
 ### Database Migrations
@@ -115,93 +231,150 @@ uv run alembic revision --autogenerate -m "description"
 # Apply migrations
 uv run alembic upgrade head
 
-# Check status
+# Rollback one version
+uv run alembic downgrade -1
+
+# Check current version
 uv run alembic current
 ```
 
-### Package Management
+### Pre-start Health Check
+
+The `backend_pre_start.py` script runs before the app starts (in Docker) to verify database connectivity:
 
 ```bash
-# Add dependency
-uv add package-name
-
-# Add dev dependency
-uv add --dev package-name
-
-# Sync dependencies
-uv sync
+# Run manually
+uv run python backend_pre_start.py
 ```
 
-## Project Structure
+Features:
+- Retries DB connection up to 300 times (5 minutes)
+- Logs all retry attempts
+- Exits with error code if DB is unreachable
 
-```
-hotel_management_admin/
-├── app/
-│   ├── main.py              # FastAPI application entry
-│   ├── api/
-│   │   ├── routes.py        # Central router
-│   │   └── endpoints/       # API endpoints
-│   ├── services/            # Business logic
-│   │   ├── s3_service.py
-│   │   ├── file_validator.py
-│   │   └── s3_cleanup.py
-│   ├── models/              # SQLAlchemy models
-│   ├── db/                  # Database config
-│   └── core/                # Config & utilities
-├── tests/                   # Test suite
-│   ├── unit/
-│   ├── integration/
-├── alembic/                 # Database migrations
-├── pyproject.toml           # Project config & dependencies
-├── uv.lock                  # Locked dependencies
-└── docker-compose.yml       # Docker setup
-```
+### Initial Data Seeding
 
-## Environment Variables
-
-Create a `.env` file:
+Create default admin user for development:
 
 ```bash
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/hotel_db
-
-# AWS S3
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-AWS_S3_BUCKET_NAME=your_bucket
-AWS_S3_REGION=us-east-1
-
-# Security
-SECRET_KEY=your_secret_key_here
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# Server
-PORT=8000
+uv run python initial_data.py
 ```
 
-## Security Features
+Creates: `username: admin`, `password: admin123` (if no users exist)
 
-- JWT token-based authentication
-- Password hashing with bcrypt
-- File validation (magic bytes, size limits, sanitization)
-- Path traversal prevention
-- Database-first upload pattern (prevents orphaned S3 files)
+## 🔒 Security Features
 
-## CI/CD
+- **JWT Authentication**: OAuth2-compatible token-based auth
+- **Password Hashing**: bcrypt with cost factor 12
+- **File Validation**: Magic bytes verification, size limits, path sanitization
+- **Path Traversal Prevention**: Filename sanitization
+- **Database-first Uploads**: Prevents orphaned S3 files
+- **CORS**: Configurable allowed origins
+- **Sentry**: Error tracking and performance monitoring
 
-GitHub Actions workflow runs on every push:
-- Tests (unit, integration, e2e)
-- Code quality checks (ruff, mypy)
-- Migration validation
+## 🚢 Production Deployment
 
-See `.github/workflows/tests.yml` for details.
+### Environment Variables
 
-## Deployment
+Set these in production:
 
-The application uses the `PORT` environment variable for Cloud Run compatibility.
+```bash
+ENVIRONMENT=production
+SECRET_KEY=<strong-random-key>
+SENTRY_DSN=<your-sentry-dsn>
+PG_HOST=<production-db-host>
+AWS_ACCESS_KEY_ID=<production-key>
+AWS_SECRET_ACCESS_KEY=<production-secret>
+```
 
-For architecture details and AI development context, see [CLAUDE.md](./CLAUDE.md).
+### Docker
 
-## License
+The Dockerfile includes:
+- Multi-stage build for smaller images
+- Pre-start health check
+- UV for fast dependency installation
+- Non-root user execution
+
+### Health Checks
+
+- **Liveness**: `GET /health` - Always returns 200 if app is running
+- **Readiness**: `GET /health/ready` - Returns 200 only if DB is accessible
+
+## 📊 Monitoring
+
+### Sentry Integration
+
+Automatically enabled if `SENTRY_DSN` is set:
+
+```bash
+export SENTRY_DSN="https://your-dsn@sentry.io/project-id"
+export ENVIRONMENT="production"
+```
+
+Features:
+- Error tracking with full stack traces
+- Performance monitoring (10% sample rate in production)
+- SQLAlchemy query tracking
+- FastAPI request tracing
+
+### Structured Logging
+
+All logs are output as JSON for easy parsing:
+
+```json
+{
+  "timestamp": "2024-12-07 21:00:00,000",
+  "level": "INFO",
+  "name": "app.main",
+  "message": "Application started"
+}
+```
+
+## 🧩 Design Patterns
+
+### Generic CRUD Repository
+
+The `app/crud/base.py` provides reusable database operations:
+
+```python
+from app.crud import room
+
+# Get all rooms
+rooms = room.get_multi(db, skip=0, limit=100)
+
+# Get by ID
+room_obj = room.get(db, id_=1)
+
+# Create
+new_room = room.create(db, obj_in=RoomCreate(...))
+
+# Update
+updated = room.update(db, db_obj=room_obj, obj_in={"price": 150.0})
+
+# Delete
+room.remove(db, id_=1)
+```
+
+Benefits:
+- DRY principle
+- Consistent error handling
+- Easy to test
+- Type-safe with generics
+
+## 📝 License
 
 MIT
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests: `uv run pytest`
+5. Run linting: `uv run ruff check --fix app/`
+6. Submit a pull request
+
+## 📚 Additional Documentation
+
+- [CLAUDE.md](./CLAUDE.md) - AI development context and architecture details
+- [GEMINI.md](./GEMINI.md) - Project overview and conventions
