@@ -592,6 +592,10 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
+    { name = "moto", extra = ["s3"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "pytest-cov" },
 ]
 
@@ -636,7 +640,13 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest-cov", specifier = ">=7.0.0" }]
+dev = [
+    { name = "httpx", specifier = ">=0.24.0" },
+    { name = "moto", extras = ["s3"], specifier = ">=5.0.0" },
+    { name = "pytest", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", specifier = ">=0.21.0" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
+]
 
 [[package]]
 name = "httpcore"
