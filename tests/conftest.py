@@ -5,7 +5,27 @@ from typing import AsyncGenerator, Generator
 from unittest.mock import MagicMock
 
 # Mock python-magic which requires system libmagic
-sys.modules["magic"] = MagicMock()
+def create_magic_mock():
+    """Create python-magic mock with MIME type detection"""
+    def detect_mime(content):
+        # Simple magic byte detection for common types
+        if content.startswith(b"%PDF"):
+            return "application/pdf"
+        if content.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if content.startswith(b"\x89PNG"):
+            return "image/png"
+        return "application/octet-stream"
+
+    mock_instance = MagicMock()
+    mock_instance.from_buffer = detect_mime
+
+    magic_module = MagicMock()
+    magic_module.Magic.return_value = mock_instance
+
+    return magic_module
+
+sys.modules["magic"] = create_magic_mock()
 
 from httpx import AsyncClient
 from sqlalchemy import create_engine
@@ -42,12 +62,15 @@ def db(db_engine) -> Generator:
 
 @pytest.fixture(scope="function")
 async def client(db) -> AsyncGenerator:
+    from httpx import ASGITransport
+
     def override_get_session():
         yield db
 
     app.dependency_overrides[get_session] = override_get_session
 
-    async with AsyncClient(app=app, base_url="http://test") as c:
+    # httpx 0.28+ requires transport parameter instead of app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
     app.dependency_overrides.clear()
@@ -135,5 +158,5 @@ def admin_auth_headers(admin_user):
     """Generate JWT auth headers for admin user"""
     from app.core.security import create_access_token
 
-    token = create_access_token(data={"sub": str(admin_user.id)})
+    token = create_access_token(subject=str(admin_user.id))
     return {"Authorization": f"Bearer {token}"}

@@ -1,9 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from app.core.config import settings
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def create_access_token(subject: str | int, expires_delta: timedelta | None = None) -> str:
     if expires_delta:
@@ -21,7 +19,19 @@ def create_access_token(subject: str | int, expires_delta: timedelta | None = No
     return encoded_jwt
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against a bcrypt hash"""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'),
+            hashed_password.encode('utf-8')
+        )
+    except (ValueError, AttributeError):
+        # Malformed hash or encoding error
+        return False
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password) 
+    """Generate bcrypt hash for a password (cost factor: 12)"""
+    # Explicitly set cost factor for auditability (12 is minimum recommended)
+    salt = bcrypt.gensalt(rounds=12)
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8') 

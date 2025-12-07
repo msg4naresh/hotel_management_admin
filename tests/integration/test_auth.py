@@ -5,9 +5,10 @@ import pytest
 @pytest.mark.asyncio
 async def test_login_successful(client, admin_user):
     """Test successful login with valid credentials"""
+    # OAuth2PasswordRequestForm expects form data, not JSON
     response = await client.post(
-        "/api/v1/auth/login",
-        json={"email": "admin", "password": "AdminPass123"},
+        "/api/v1/login",
+        data={"username": "admin", "password": "AdminPass123"},
     )
 
     assert response.status_code == 200
@@ -20,8 +21,8 @@ async def test_login_successful(client, admin_user):
 async def test_login_invalid_credentials(client):
     """Test login with invalid credentials"""
     response = await client.post(
-        "/api/v1/auth/login",
-        json={"email": "nonexistent", "password": "WrongPass"},
+        "/api/v1/login",
+        data={"username": "nonexistent", "password": "WrongPass"},
     )
 
     assert response.status_code == 401
@@ -31,8 +32,8 @@ async def test_login_invalid_credentials(client):
 async def test_login_missing_credentials(client):
     """Test login with missing credentials"""
     response = await client.post(
-        "/api/v1/auth/login",
-        json={"email": "admin"},  # missing password
+        "/api/v1/login",
+        data={"username": "admin"},  # missing password
     )
 
     assert response.status_code in [400, 422]

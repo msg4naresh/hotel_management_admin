@@ -89,6 +89,15 @@ Homepage = "https://github.com/yourusername/hotel-management-admin"
 Repository = "https://github.com/yourusername/hotel-management-admin.git"
 Issues = "https://github.com/yourusername/hotel-management-admin/issues"
 
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=7.0.0",
+    "httpx>=0.24.0",
+    "moto[s3]>=5.0.0",
+]
+
 # UV configuration - no additional settings needed for simple projects
 
 [tool.pytest.ini_options]

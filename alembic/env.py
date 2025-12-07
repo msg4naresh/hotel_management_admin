@@ -26,7 +26,7 @@ from app.models import rooms  # noqa
 config = context.config
 
 # Overwrite the sqlalchemy.url in the config with the one from our app
-config.set_main_option("sqlalchemy.url", get_database_uri())
+config.set_main_option("sqlalchemy.url", get_database_uri().replace('%', '%%'))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
