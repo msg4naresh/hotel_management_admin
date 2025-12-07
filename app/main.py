@@ -1,4 +1,3 @@
-import os
 from fastapi import FastAPI
 from app.core.config import settings
 from app.db.init_db import init_db
@@ -20,7 +19,7 @@ app = FastAPI(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Initialize database tables (skip during testing)
-if os.getenv("TESTING") != "1":
+if not settings.TESTING:
     init_db()
 
 

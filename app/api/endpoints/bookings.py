@@ -22,9 +22,10 @@ router = APIRouter()
 def get_bookings(current_user: UserDB = Depends(get_current_user)):
     try:
         with get_session() as session:
-            bookings = BookingDB.get_all_bookings(session)
+            bookings = session.query(BookingDB).all()
             return bookings
     except Exception as e:
+        logger.exception("Error retrieving bookings")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve bookings"
@@ -98,8 +99,18 @@ def check_in(
             if not booking:
                 raise HTTPException(status_code=404, detail="Booking not found")
 
+            # Validate status before check-in
+            if booking.booking_status not in [
+                BookingStatus.PREBOOKED.value,
+                BookingStatus.CONFIRMED.value
+            ]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot check in booking with status: {booking.booking_status}"
+                )
+
             booking.actual_check_in = datetime.now(timezone.utc)
-            booking.booking_status = BookingStatus.CHECKED_IN
+            booking.booking_status = BookingStatus.CHECKED_IN.value
             session.commit()
 
             return {"message": "Check-in successful"}
@@ -126,8 +137,15 @@ def check_out(
             if not booking:
                 raise HTTPException(status_code=404, detail="Booking not found")
 
+            # Validate status before check-out
+            if booking.booking_status != BookingStatus.CHECKED_IN.value:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot check out booking with status: {booking.booking_status}"
+                )
+
             booking.actual_check_out = datetime.now(timezone.utc)
-            booking.booking_status = BookingStatus.CHECKED_OUT
+            booking.booking_status = BookingStatus.CHECKED_OUT.value
             session.commit()
 
             return {
@@ -157,13 +175,13 @@ def cancel_booking(
             if not booking:
                 raise HTTPException(status_code=404, detail="Booking not found")
 
-            if booking.booking_status not in [BookingStatus.PENDING, BookingStatus.CONFIRMED]:
+            if booking.booking_status not in [BookingStatus.PENDING.value, BookingStatus.CONFIRMED.value]:
                 raise HTTPException(
                     status_code=400,
                     detail="Cannot cancel booking in current status"
                 )
 
-            booking.booking_status = BookingStatus.CANCELLED
+            booking.booking_status = BookingStatus.CANCELLED.value
             session.commit()
 
             return {"message": "Booking cancelled successfully"}

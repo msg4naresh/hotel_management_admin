@@ -15,7 +15,7 @@ router = APIRouter()
 def get_rooms(current_user: UserDB = Depends(get_current_user)):
     try:
         with get_session() as session:
-            rooms = RoomDB.get_all_rooms(session)
+            rooms = session.query(RoomDB).all()
             return rooms
     except Exception as e:
         logger.exception("Error retrieving rooms")

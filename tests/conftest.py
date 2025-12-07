@@ -148,5 +148,5 @@ def test_booking(db, test_room, test_customer):
 def admin_auth_headers(admin_user):
     from app.core.security import create_access_token
 
-    token = create_access_token(subject=str(admin_user.id))
+    token = create_access_token(subject=admin_user.username)
     return {"Authorization": f"Bearer {token}"}

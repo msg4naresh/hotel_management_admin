@@ -7,10 +7,6 @@ from sqlalchemy.orm import Session
 from app.core import security
 
 
-def _utcnow():
-    return datetime.now(timezone.utc)
-
-
 class UserDB(Base):
     __tablename__ = "users"
 
@@ -18,8 +14,8 @@ class UserDB(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=_utcnow, nullable=False)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     def verify_password(self, plain_password: str) -> bool:
         return security.verify_password(plain_password, self.hashed_password)
@@ -27,12 +23,6 @@ class UserDB(Base):
     @staticmethod
     def hash_password(password: str) -> str:
         return security.get_password_hash(password)
-
-    @classmethod
-    def get_all_users(cls, session: Session) -> list["UserDB"]:
-        return session.query(cls).all()
-
-
 
 
 class UserResponse(BaseModel):

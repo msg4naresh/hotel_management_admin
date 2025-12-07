@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     ALLOWED_FILE_TYPES: list[str] = ["application/pdf", "image/jpeg", "image/png"]
     ALLOWED_EXTENSIONS: list[str] = ["pdf", "jpg", "jpeg", "png"]
 
+    # Testing flag
+    TESTING: bool = False  # Default to production mode
+
     class Config:
         env_file = ".env"
         case_sensitive = False  # Allow AWS_ACCESS_KEY_ID or aws_access_key_id

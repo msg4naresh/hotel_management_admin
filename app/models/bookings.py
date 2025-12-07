@@ -6,10 +6,6 @@ from pydantic import BaseModel, field_validator
 from app.models.enums import BookingStatus, PaymentStatus
 
 
-def _utcnow():
-    return datetime.now(timezone.utc)
-
-
 class BookingDB(Base):
     __tablename__ = "bookings"
 
@@ -35,8 +31,8 @@ class BookingDB(Base):
     additional_charges = Column(Numeric(10, 2), default=0)
     notes = Column(String, nullable=True)
 
-    booking_date = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    booking_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     room = relationship("RoomDB")
@@ -64,10 +60,6 @@ class BookingDB(Base):
             cls.scheduled_check_in < check_out_date,
             cls.scheduled_check_out > check_in_date
         ).first() is not None
-
-    @classmethod
-    def get_all_bookings(cls, session):
-        return session.query(cls).all()
 
 class BookingCreate(BaseModel):
     room_id: int

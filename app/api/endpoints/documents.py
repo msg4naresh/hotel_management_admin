@@ -6,6 +6,7 @@ from app.models.users import UserDB
 from app.models.customer import CustomerDB
 from app.models.schemas.file_upload import FileUploadResponse, DocumentDeleteResponse
 from app.api.dependencies.auth_deps import get_current_user
+from app.api.dependencies.s3_deps import get_s3_service
 from app.db.base_db import get_session
 from app.services.s3_service import S3Service
 from app.services import file_validator
@@ -28,6 +29,7 @@ async def upload_document(
     document_type: str = Form(...),
     file: UploadFile = File(...),
     current_user: UserDB = Depends(get_current_user),
+    s3_service: S3Service = Depends(get_s3_service),
 ):
     """
     Upload a document for a customer to S3 and store the URL in the database.
@@ -36,7 +38,6 @@ async def upload_document(
     - **document_type**: Type of document (e.g., "passport", "license")
     - **file**: The document file to upload (PDF or JPG)
     """
-    s3_service = S3Service()
 
     try:
         # 1. Read and validate file content
@@ -131,13 +132,13 @@ async def upload_document(
 async def delete_document(
     customer_id: int,
     current_user: UserDB = Depends(get_current_user),
+    s3_service: S3Service = Depends(get_s3_service),
 ):
     """
     Delete the proof document for a customer from S3 and database.
 
     - **customer_id**: ID of the customer whose document to delete
     """
-    s3_service = S3Service()
 
     try:
         # 1. Single transaction: get customer, extract S3 key, clear record

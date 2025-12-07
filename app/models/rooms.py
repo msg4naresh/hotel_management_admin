@@ -30,8 +30,3 @@ class RoomDB(Base):
     capacity = Column(Integer, nullable=False)
     price_per_night = Column(Float, nullable=False)
     amenities = Column(JSON, nullable=False)
-
-    @classmethod
-    def get_all_rooms(cls, session):
-        return session.query(cls).all()
-    

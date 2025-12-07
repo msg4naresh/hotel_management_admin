@@ -1,11 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float, JSON, DateTime
 from app.models.base import Base
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime, timezone
-
-
-def _utcnow():
-    return datetime.now(timezone.utc)
+import re
 
 
 class CustomerBase(BaseModel):
@@ -21,7 +18,29 @@ class CustomerBase(BaseModel):
         from_attributes = True
 
 class CustomerCreate(CustomerBase):
-    pass
+    @field_validator('email')
+    @classmethod
+    def email_validator(cls, v):
+        # Simple email validation
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v):
+            raise ValueError("Invalid email format")
+        return v.lower()  # Normalize to lowercase
+
+    @field_validator('phone')
+    @classmethod
+    def phone_validator(cls, v):
+        # Remove common formatting characters
+        cleaned = re.sub(r'[\s\-\(\)\.]', '', v)
+        if not cleaned.isdigit() or len(cleaned) < 10:
+            raise ValueError("Phone must contain at least 10 digits")
+        return cleaned  # Store cleaned version
+
+    @field_validator('name')
+    @classmethod
+    def name_validator(cls, v):
+        if len(v.strip()) < 2:
+            raise ValueError("Name must be at least 2 characters")
+        return v.strip()
 
 class CustomerResponse(CustomerBase):
     id: int
@@ -31,15 +50,10 @@ class CustomerDB(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
-    email = Column(String(50), nullable=False)
+    email = Column(String(50), unique=True, index=True, nullable=False)
     phone = Column(String(20), nullable=False)
     address = Column(String(200), nullable=False)
     proof_of_identity = Column(String(200), nullable=False)
     proof_image_url = Column(String(500), nullable=True)
     proof_image_filename = Column(String(255), nullable=True)
-    uploaded_at = Column(DateTime, default=_utcnow)
-
-    @classmethod
-    def get_all_customers(cls, session):
-        return session.query(cls).all()
-    
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
