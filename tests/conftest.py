@@ -1,11 +1,43 @@
 import os
-import pytest
 import sys
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator
 from unittest.mock import MagicMock
 
-# Set testing flag to prevent database initialization
+import boto3
+import pytest
+from httpx import AsyncClient
+from moto import mock_aws
+
+# Set testing environment BEFORE importing app modules
+# This ensures settings are loaded with TESTING=True and init_db() is skipped
 os.environ["TESTING"] = "1"
+os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+os.environ["AWS_SECURITY_TOKEN"] = "testing"
+os.environ["AWS_SESSION_TOKEN"] = "testing"
+os.environ["AWS_S3_REGION"] = "us-east-1"
+os.environ["AWS_S3_BUCKET_NAME"] = "test-bucket"
+
+# Now import app modules
+from httpx import ASGITransport
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.api.dependencies.s3_deps import get_s3_service
+from app.db.base_db import get_db
+from app.main import app
+from app.models.base import Base
+from app.services.s3_service import S3Service
+
+
+@pytest.fixture(scope="function")
+def s3_client():
+    """Mocked S3 client."""
+    with mock_aws():
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="test-bucket")
+        yield s3
+
 
 # Mock python-magic for testing
 def create_magic_mock():
@@ -25,14 +57,8 @@ def create_magic_mock():
     magic_module.Magic.return_value = mock_instance
     return magic_module
 
-sys.modules["magic"] = create_magic_mock()
 
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from app.main import app
-from app.db.base_db import get_session
-from app.models.base import Base
+sys.modules["magic"] = create_magic_mock()
 
 # Test database setup
 TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -42,16 +68,32 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(scope="session")
 def db_engine():
+    # Create tables once
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope="function")
-def db(db_engine) -> Generator:
+def db_session_factory(db_engine):
+    """
+    Creates a new database connection for a test, binds SessionLocal to it,
+    and starts a transaction. rolls back at end.
+    """
     connection = db_engine.connect()
     transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection)
+
+    # Bind the global SessionLocal to this connection
+    from app.db import base_db
+
+    # Save original bind
+    original_bind = base_db.SessionLocal.kw.get("bind")
+
+    # Configure to use the connection
+    base_db.SessionLocal.configure(bind=connection)
+
+    # Create a session for the test fixture usage
+    session = base_db.SessionLocal()
 
     yield session
 
@@ -59,13 +101,36 @@ def db(db_engine) -> Generator:
     transaction.rollback()
     connection.close()
 
+    # Restore original bind (to engine)
+    if original_bind:
+        base_db.SessionLocal.configure(bind=original_bind)
+    else:
+        # Fallback if original bind was None or not set in kw
+        base_db.SessionLocal.configure(bind=db_engine)
+
 
 @pytest.fixture(scope="function")
-async def client(db) -> AsyncGenerator:
-    def override_get_session():
+def db(db_session_factory):
+    """
+    Yields the shared session.
+    """
+    yield db_session_factory
+
+
+@pytest.fixture(scope="function")
+async def client(db, s3_client) -> AsyncGenerator[AsyncClient, None]:
+    def override_get_db():
         yield db
 
-    app.dependency_overrides[get_session] = override_get_session
+    def override_s3_service():
+        return S3Service()
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_s3_service] = override_s3_service
+
+    # Note: Because we rebound SessionLocal, calls to get_db()
+    # (used in auth_deps) will ALSO use the same connection.
+    # S3Service will use mocked AWS via moto context
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
@@ -125,8 +190,9 @@ def test_room(db):
 
 @pytest.fixture
 def test_booking(db, test_room, test_customer):
-    from app.models.bookings import BookingDB
     from datetime import date, timedelta
+
+    from app.models.bookings import BookingDB
 
     check_in = date.today() + timedelta(days=1)
     check_out = check_in + timedelta(days=3)

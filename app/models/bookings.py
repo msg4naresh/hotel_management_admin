@@ -1,8 +1,10 @@
-from datetime import datetime, date, timedelta, timezone
-from sqlalchemy import Column, Integer, ForeignKey, Date, DateTime, String, Numeric
-from sqlalchemy.orm import relationship
-from app.models.base import Base
+from datetime import date, datetime, timezone
+
 from pydantic import BaseModel, field_validator
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy.orm import relationship
+
+from app.models.base import Base
 from app.models.enums import BookingStatus, PaymentStatus
 
 
@@ -14,10 +16,10 @@ class BookingDB(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"))
 
     # Booking dates
-    scheduled_check_in = Column(Date)    # Original planned check-in
-    scheduled_check_out = Column(Date)   # Original planned check-out
-    actual_check_in = Column(DateTime, nullable=True)    # Actual check-in time
-    actual_check_out = Column(DateTime, nullable=True)   # Actual check-out time
+    scheduled_check_in = Column(Date)  # Original planned check-in
+    scheduled_check_out = Column(Date)  # Original planned check-out
+    actual_check_in = Column(DateTime, nullable=True)  # Actual check-in time
+    actual_check_out = Column(DateTime, nullable=True)  # Actual check-out time
 
     # Status tracking
     booking_status = Column(String, default=BookingStatus.PREBOOKED.value)
@@ -32,13 +34,13 @@ class BookingDB(Base):
     notes = Column(String, nullable=True)
 
     booking_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
+    updated_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
+    )
+
     # Relationships
     room = relationship("RoomDB")
     customer = relationship("CustomerDB")
-
-    
 
     @classmethod
     def is_room_occupied(cls, session, room_id: int, check_in_date: date, check_out_date: date) -> bool:
@@ -49,17 +51,21 @@ class BookingDB(Base):
             room_id: ID of the room to check
             check_date: Optional specific date to check (defaults to today)
         """
-        return session.query(cls).filter(
-            cls.room_id == room_id,
-            cls.booking_status.in_([
-                BookingStatus.CHECKED_IN.value, 
-                BookingStatus.CONFIRMED.value, 
-                BookingStatus.PREBOOKED.value
-            ]),
-            # Check if there's any overlap with existing bookings
-            cls.scheduled_check_in < check_out_date,
-            cls.scheduled_check_out > check_in_date
-        ).first() is not None
+        return (
+            session.query(cls)
+            .filter(
+                cls.room_id == room_id,
+                cls.booking_status.in_(
+                    [BookingStatus.CHECKED_IN.value, BookingStatus.CONFIRMED.value, BookingStatus.PREBOOKED.value]
+                ),
+                # Check if there's any overlap with existing bookings
+                cls.scheduled_check_in < check_out_date,
+                cls.scheduled_check_out > check_in_date,
+            )
+            .first()
+            is not None
+        )
+
 
 class BookingCreate(BaseModel):
     room_id: int
@@ -73,36 +79,37 @@ class BookingCreate(BaseModel):
     additional_charges: float
     notes: str | None
 
-    @field_validator('scheduled_check_in')
+    @field_validator("scheduled_check_in")
     @classmethod
     def check_in_date_validation(cls, v):
         if v < date.today():
             raise ValueError("Check-in date cannot be in the past")
         return v
 
-    @field_validator('scheduled_check_out')
+    @field_validator("scheduled_check_out")
     @classmethod
     def check_out_date_validation(cls, v, info):
-        check_in = info.data.get('scheduled_check_in')
+        check_in = info.data.get("scheduled_check_in")
         if check_in and v <= check_in:
             raise ValueError("Check-out date must be after check-in date")
         return v
 
-    @field_validator('amount_paid')
+    @field_validator("amount_paid")
     @classmethod
     def amount_paid_validation(cls, v, info):
         if v < 0:
             raise ValueError("Amount paid cannot be negative")
-        if 'total_amount' in info.data and v > info.data['total_amount']:
+        if "total_amount" in info.data and v > info.data["total_amount"]:
             raise ValueError("Amount paid cannot exceed total amount")
         return v
 
-    @field_validator('total_amount')
+    @field_validator("total_amount")
     @classmethod
     def total_amount_validation(cls, v):
         if v <= 0:
             raise ValueError("Total amount must be greater than zero")
         return v
+
 
 class BookingResponse(BaseModel):
     id: int
@@ -121,4 +128,4 @@ class BookingResponse(BaseModel):
     booking_date: datetime
 
     class Config:
-        from_attributes = True 
+        from_attributes = True

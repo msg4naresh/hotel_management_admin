@@ -1,54 +1,44 @@
 """Tests for file validation"""
+
 import pytest
+
 from app.services import file_validator
 
 
 # Core validation tests
 def test_validates_pdf():
-    safe_name, ext, content_type = file_validator.validate_file(
-        "document.pdf", b"%PDF-1.4"
-    )
+    safe_name, ext, content_type = file_validator.validate_file("document.pdf", b"%PDF-1.4")
     assert ext == "pdf"
     assert content_type == "application/pdf"
 
 
 def test_validates_jpeg():
-    safe_name, ext, content_type = file_validator.validate_file(
-        "photo.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF"
-    )
+    safe_name, ext, content_type = file_validator.validate_file("photo.jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF")
     assert ext == "jpg"
     assert content_type == "image/jpeg"
 
 
 def test_validates_png():
-    safe_name, ext, content_type = file_validator.validate_file(
-        "image.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
-    )
+    safe_name, ext, content_type = file_validator.validate_file("image.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
     assert ext == "png"
     assert content_type == "image/png"
 
 
 # Security tests
 def test_sanitizes_path_traversal():
-    safe_name, _, _ = file_validator.validate_file(
-        "../../../etc/passwd.pdf", b"%PDF-1.4"
-    )
+    safe_name, _, _ = file_validator.validate_file("../../../etc/passwd.pdf", b"%PDF-1.4")
     assert safe_name == "passwd.pdf"
     assert ".." not in safe_name
 
 
 def test_sanitizes_unsafe_characters():
-    safe_name, _, _ = file_validator.validate_file(
-        "my@file#2025.pdf", b"%PDF-1.4"
-    )
+    safe_name, _, _ = file_validator.validate_file("my@file#2025.pdf", b"%PDF-1.4")
     assert "@" not in safe_name
     assert "#" not in safe_name
 
 
 def test_strips_absolute_paths():
-    safe_name, _, _ = file_validator.validate_file(
-        "/home/user/documents/passport.pdf", b"%PDF-1.4"
-    )
+    safe_name, _, _ = file_validator.validate_file("/home/user/documents/passport.pdf", b"%PDF-1.4")
     assert safe_name == "passport.pdf"
     assert "/" not in safe_name
 
@@ -76,6 +66,7 @@ def test_rejects_mime_mismatch():
 
 def test_rejects_oversized_file(monkeypatch):
     from app.core import config
+
     monkeypatch.setattr(config.settings, "MAX_FILE_SIZE", 100)
 
     with pytest.raises(ValueError, match="File exceeds maximum size"):

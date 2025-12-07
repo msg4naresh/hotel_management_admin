@@ -1,10 +1,12 @@
 """Tests for database models"""
+
 from datetime import date, datetime, timedelta
-from app.models.customer import CustomerDB
-from app.models.users import UserDB
+
 from app.models.bookings import BookingDB
-from app.models.rooms import RoomDB
+from app.models.customer import CustomerDB
 from app.models.enums import BookingStatus, PaymentStatus
+from app.models.rooms import RoomDB
+from app.models.users import UserDB
 
 
 # Customer model

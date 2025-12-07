@@ -1,8 +1,10 @@
-from sqlalchemy import Column, Integer, String, Float, JSON, DateTime
-from app.models.base import Base
-from pydantic import BaseModel, Field, field_validator
-from datetime import datetime, timezone
 import re
+from datetime import datetime, timezone
+
+from pydantic import BaseModel, field_validator
+from sqlalchemy import Column, DateTime, Integer, String
+
+from app.models.base import Base
 
 
 class CustomerBase(BaseModel):
@@ -17,33 +19,36 @@ class CustomerBase(BaseModel):
     class Config:
         from_attributes = True
 
+
 class CustomerCreate(CustomerBase):
-    @field_validator('email')
+    @field_validator("email")
     @classmethod
     def email_validator(cls, v):
         # Simple email validation
-        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v):
+        if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", v):
             raise ValueError("Invalid email format")
         return v.lower()  # Normalize to lowercase
 
-    @field_validator('phone')
+    @field_validator("phone")
     @classmethod
     def phone_validator(cls, v):
         # Remove common formatting characters
-        cleaned = re.sub(r'[\s\-\(\)\.]', '', v)
+        cleaned = re.sub(r"[\s\-\(\)\.]", "", v)
         if not cleaned.isdigit() or len(cleaned) < 10:
             raise ValueError("Phone must contain at least 10 digits")
         return cleaned  # Store cleaned version
 
-    @field_validator('name')
+    @field_validator("name")
     @classmethod
     def name_validator(cls, v):
         if len(v.strip()) < 2:
             raise ValueError("Name must be at least 2 characters")
         return v.strip()
 
+
 class CustomerResponse(CustomerBase):
     id: int
+
 
 class CustomerDB(Base):
     __tablename__ = "customers"

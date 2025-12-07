@@ -1,8 +1,11 @@
 """File validation utilities (module-level functions, no unnecessary classes)"""
+
+import logging
 import re
 from pathlib import Path
+
 import magic
-import logging
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -89,7 +92,7 @@ def validate_file(filename: str, content: bytes) -> tuple[str, str, str]:
         raise  # Re-raise validation errors
     except Exception as e:
         logger.error(f"MIME type detection failed: {e}")
-        raise ValueError("Unable to validate file content type")
+        raise ValueError("Unable to validate file content type") from e
 
     content_type = ALLOWED_FILE_TYPES[extension]
 

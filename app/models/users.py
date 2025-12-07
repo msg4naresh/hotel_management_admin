@@ -1,10 +1,10 @@
-
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from app.models.base import Base
+
 from pydantic import BaseModel, field_validator
-from sqlalchemy.orm import Session
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
+
 from app.core import security
+from app.models.base import Base
 
 
 class UserDB(Base):
@@ -15,7 +15,12 @@ class UserDB(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
 
     def verify_password(self, plain_password: str) -> bool:
         return security.verify_password(plain_password, self.hashed_password)
@@ -31,18 +36,16 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
-
 class UserCreate(BaseModel):
-    
     username: str
     password: str
 
-    @field_validator('username')
+    @field_validator("username")
     @classmethod
     def username_validator(cls, v):
         if len(v) < 3:
@@ -51,7 +54,7 @@ class UserCreate(BaseModel):
             raise ValueError("Username must contain only letters and numbers")
         return v
 
-    @field_validator('password')
+    @field_validator("password")
     @classmethod
     def password_validator(cls, v):
         if len(v) < 8:

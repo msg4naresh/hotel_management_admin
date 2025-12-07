@@ -40,7 +40,6 @@ uv run pytest tests/ --cov=app --cov-report=html
 # Run specific test types
 uv run pytest tests/unit/ -v           # Unit tests
 uv run pytest tests/integration/ -v    # Integration tests
-uv run pytest tests/e2e/ -v            # End-to-end tests
 ```
 
 ## Core Features
@@ -98,8 +97,7 @@ All endpoints prefixed with `/api/v1`:
 
 ```bash
 # Format code
-uv run black app/ tests/
-uv run isort app/ tests/
+uv run ruff format app/ tests/
 
 # Lint
 uv run ruff check --fix app/ tests/
@@ -153,7 +151,6 @@ hotel_management_admin/
 ├── tests/                   # Test suite
 │   ├── unit/
 │   ├── integration/
-│   └── e2e/
 ├── alembic/                 # Database migrations
 ├── pyproject.toml           # Project config & dependencies
 ├── uv.lock                  # Locked dependencies
@@ -194,7 +191,7 @@ PORT=8000
 
 GitHub Actions workflow runs on every push:
 - Tests (unit, integration, e2e)
-- Code quality checks (ruff, black, mypy)
+- Code quality checks (ruff, mypy)
 - Migration validation
 
 See `.github/workflows/tests.yml` for details.

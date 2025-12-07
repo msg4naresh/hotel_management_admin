@@ -3,7 +3,7 @@
 # Generated with: uv pip compile pyproject.toml -o requirements.txt
 
 # Web Framework
-fastapi==0.120.0
+fastapi=dock=0.124.0
 uvicorn[standard]==0.35.0
 starlette==0.41.3
 

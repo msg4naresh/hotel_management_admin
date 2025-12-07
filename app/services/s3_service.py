@@ -1,6 +1,9 @@
-import boto3
 import logging
 from datetime import datetime, timezone
+
+import boto3
+from botocore.exceptions import ClientError
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -37,9 +40,7 @@ class S3Service:
         """Generate public S3 URL for the uploaded file"""
         return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{s3_key}"
 
-    def upload_file(
-        self, file_content: bytes, filename: str, customer_id: int, content_type: str
-    ) -> str:
+    def upload_file(self, file_content: bytes, filename: str, customer_id: int, content_type: str) -> str:
         """
         Upload file to S3 and return the public URL
 
@@ -56,8 +57,6 @@ class S3Service:
             ValueError: If URL extraction fails
             ClientError: If S3 upload fails (boto3)
         """
-        from botocore.exceptions import ClientError
-
         try:
             s3_key = self.generate_s3_key(customer_id, filename)
 
@@ -69,9 +68,7 @@ class S3Service:
             )
 
             s3_url = self.generate_s3_url(s3_key)
-            logger.info(
-                f"Successfully uploaded file to S3. Customer: {customer_id}, Key: {s3_key}"
-            )
+            logger.info(f"Successfully uploaded file to S3. Customer: {customer_id}, Key: {s3_key}")
             return s3_url
 
         except ClientError as e:
@@ -94,8 +91,6 @@ class S3Service:
         Raises:
             ClientError: If S3 delete fails (boto3)
         """
-        from botocore.exceptions import ClientError
-
         try:
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
             logger.info(f"Successfully deleted file from S3. Key: {s3_key}")
@@ -120,7 +115,16 @@ class S3Service:
         Raises:
             ValueError: If URL is not from expected bucket
         """
-        prefix = f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/"
-        if not s3_url.startswith(prefix):
-            raise ValueError(f"URL not from expected bucket: {s3_url}")
-        return s3_url[len(prefix) :]
+        if s3_url.startswith(f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/"):
+            return s3_url.replace(f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/", "")
+
+        # Handle path-style URLs: https://s3.region.amazonaws.com/bucket/key
+        path_style_prefix = f"https://s3.{self.region}.amazonaws.com/{self.bucket_name}/"
+        if s3_url.startswith(path_style_prefix):
+            return s3_url[len(path_style_prefix) :]
+
+        # Handle cases where region might be different or standard s3.amazonaws.com
+        if s3_url.startswith(f"https://s3.amazonaws.com/{self.bucket_name}/"):
+            return s3_url[len(f"https://s3.amazonaws.com/{self.bucket_name}/") :]
+
+        raise ValueError(f"URL not from expected bucket: {s3_url}")

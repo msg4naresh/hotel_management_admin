@@ -1,5 +1,7 @@
 """Simple best-effort S3 file cleanup (no queues, no retries, no complexity)"""
+
 import logging
+
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)

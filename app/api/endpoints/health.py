@@ -1,7 +1,9 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import text
-from app.db.base_db import get_session
-import logging
+
+from app.api.dependencies.common import SessionDep
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -14,15 +16,11 @@ async def health():
 
 
 @router.get("/health/ready")
-async def health_ready():
+def health_ready(session: SessionDep):
     """Readiness probe - can the service handle requests?"""
     try:
-        with get_session() as db:
-            db.execute(text("SELECT 1"))
+        session.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service unavailable"
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Service unavailable") from e

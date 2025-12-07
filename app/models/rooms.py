@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float, JSON
-from sqlalchemy.orm import relationship
+from pydantic import BaseModel
+from sqlalchemy import JSON, Column, Float, Integer, String
+
 from app.models.base import Base
-from pydantic import BaseModel, Field
+
 
 class RoomBase(BaseModel):
     name: str
@@ -14,11 +15,14 @@ class RoomBase(BaseModel):
     class Config:
         from_attributes = True
 
+
 class RoomCreate(RoomBase):
     pass
 
+
 class RoomResponse(RoomBase):
     id: int
+
 
 class RoomDB(Base):
     __tablename__ = "rooms"

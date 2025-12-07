@@ -1,4 +1,5 @@
 """Tests for authentication endpoints"""
+
 import pytest
 
 
@@ -11,7 +12,7 @@ async def test_health_check(client):
 @pytest.mark.asyncio
 async def test_login_missing_password(client):
     response = await client.post(
-        "/api/v1/login",
+        "/api/v1/auth/token",
         data={"username": "admin"},
     )
     assert response.status_code in [400, 422]

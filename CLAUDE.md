@@ -26,7 +26,7 @@ FastAPI-based hotel management admin system with PostgreSQL database, AWS S3 doc
 1. HTTP Request → FastAPI app
 2. JWT token extracted from Authorization header
 3. get_current_user() dependency validates token via app/api/dependencies/auth_deps.py
-4. Database session created via get_session() context manager
+4. Database session injected via get_db() dependency
 5. Endpoint handler executes business logic
 6. SQLAlchemy models converted to Pydantic response schemas
 7. JSON response returned
@@ -34,27 +34,54 @@ FastAPI-based hotel management admin system with PostgreSQL database, AWS S3 doc
 
 ### Database Session Pattern
 
-**ALWAYS use context manager** - Never manually manage sessions:
+**ALWAYS use FastAPI dependency injection** - Let the framework manage sessions:
 
 ```python
-# CORRECT
-with get_session() as session:
-    customer = session.query(CustomerDB).filter(...).first()
-    # session auto-closes on exit
+# CORRECT - FastAPI dependency injection
+from app.db.base_db import get_db
+from sqlalchemy.orm import Session
+from fastapi import Depends
 
-# WRONG - Don't do this
+@router.get("/items")
+def read_items(session: Session = Depends(get_db)):
+    items = session.query(ItemDB).all()
+    return items
+
+# MODERN (Python 3.10+) - Use Annotated for better type safety
+from typing import Annotated
+
+@router.get("/items")
+def read_items(session: Annotated[Session, Depends(get_db)]):
+    items = session.query(ItemDB).all()
+    return items
+
+# WRONG - Manual session management
 session = SessionLocal()
-customer = session.query(CustomerDB).filter(...).first()
-session.close()  # Easy to forget, creates leaks
+try:
+    items = session.query(ItemDB).all()
+finally:
+    session.close()  # Easy to forget, creates leaks
 ```
 
-For row-level locking (prevent race conditions):
+**Row-level locking** (prevent race conditions):
 ```python
-with get_session() as session:
-    customer = session.query(CustomerDB).filter(...).with_for_update().first()
-    # Row locked until transaction commits
-    customer.field = new_value
+@router.post("/items/{item_id}")
+def update_item(
+    item_id: int,
+    session: Session = Depends(get_db)
+):
+    # Lock row until transaction commits
+    item = session.query(ItemDB).filter(
+        ItemDB.id == item_id
+    ).with_for_update().first()
+
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Modify and commit
+    item.field = new_value
     session.commit()
+    return item
 ```
 
 ### File Upload Architecture (S3 Integration)
@@ -66,7 +93,9 @@ with get_session() as session:
 safe_filename, ext, content_type = file_validator.validate_file(filename, content)
 
 # 2. Single transaction: check DB, upload S3, update DB
-with get_session() as session:
+# Inject session via dependency
+@router.post("/upload")
+def upload_file(session: Session = Depends(get_db)):
     customer = session.query(CustomerDB).filter(...).with_for_update().first()
     if not customer:
         raise HTTPException(404)
@@ -176,8 +205,7 @@ uv run alembic history
 
 ```bash
 # Format code
-uv run black app/ tests/
-uv run isort app/ tests/
+uv run ruff format app/ tests/
 
 # Lint with auto-fix
 uv run ruff check --fix app/ tests/
@@ -212,7 +240,7 @@ app/
 │   ├── security.py              # JWT token utilities
 │   └── logging.py               # Structured logging setup
 ├── db/
-│   ├── base_db.py               # get_session() context manager (ALWAYS USE THIS)
+│   ├── base_db.py               # get_db() dependency (ALWAYS USE THIS)
 │   ├── postgres_db.py           # Database URI from env
 │   └── init_db.py               # Table creation
 ├── models/
@@ -229,7 +257,9 @@ app/
 │   │   ├── health.py            # /health (liveness), /health/ready (readiness)
 │   │   └── rooms.py, customers.py, bookings.py
 │   └── dependencies/
-│       └── auth_deps.py         # get_current_user() dependency
+│       ├── auth_deps.py         # get_current_user() dependency
+│       ├── s3_deps.py           # get_s3_service() dependency
+│       └── common.py            # SessionDep, CurrentUserDep, S3ServiceDep type aliases
 └── services/
     ├── s3_service.py            # AWS S3 operations (no caching!)
     ├── file_validator.py        # Module-level functions (NOT class)
@@ -266,23 +296,219 @@ All prefixed with `/api/v1`:
 
 ## Important Patterns
 
+### Dependency Type Aliases (PREFERRED PATTERN)
+
+**USE THIS PATTERN** for all new endpoints - it's more concise and type-safe:
+
+```python
+# Import pre-configured dependency type aliases
+from app.api.dependencies.common import SessionDep, CurrentUserDep, S3ServiceDep
+
+@router.get("/items")
+def get_items(
+    session: SessionDep,           # Database session
+    current_user: CurrentUserDep   # Authenticated user
+):
+    items = session.query(ItemDB).all()
+    return items
+
+@router.post("/upload")
+def upload_file(
+    session: SessionDep,
+    current_user: CurrentUserDep,
+    s3_service: S3ServiceDep       # S3 service instance
+):
+    # S3 operations here
+    pass
+```
+
+**Why this pattern?**
+- Defined once in `app/api/dependencies/common.py` - DRY principle
+- Type-safe with `Annotated[Type, Depends(func)]`
+- Cleaner endpoint signatures
+- Easier to refactor (change dependency in one place)
+
+**Available dependency aliases**:
+- `SessionDep` - `Annotated[Session, Depends(get_db)]`
+- `CurrentUserDep` - `Annotated[UserDB, Depends(get_current_user)]`
+- `S3ServiceDep` - `Annotated[S3Service, Depends(get_s3_service)]`
+
 ### Adding New Endpoints
 
 1. Create endpoint in `app/api/endpoints/{feature}.py`
-2. Add router to `app/api/routes.py`
-3. Use `Depends(get_current_user)` for authentication
-4. Use `with get_session()` for database access
+2. Import dependency aliases: `from app.api.dependencies.common import SessionDep, CurrentUserDep`
+3. Use type aliases in endpoint signatures (preferred over direct `Depends()`)
+4. Add router to `app/api/routes.py`
 5. Return Pydantic response models
 
-### Authentication Dependency
+### Alternative: Direct Dependency Injection (Legacy Pattern)
+
+**NOTE**: While this pattern still works, prefer the `SessionDep`/`CurrentUserDep` aliases above.
 
 ```python
 from app.api.dependencies.auth_deps import get_current_user
+from fastapi import Depends
 
 @router.get("/protected")
 async def protected_endpoint(current_user: UserDB = Depends(get_current_user)):
     # current_user is validated UserDB from database
     return {"user_id": current_user.id}
+```
+
+### OAuth2 JWT Authentication Pattern (FastAPI Official)
+
+**Reference**: [FastAPI OAuth2 with JWT](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
+
+Follow FastAPI's recommended OAuth2 pattern for all authentication:
+
+```python
+# app/api/dependencies/auth_deps.py
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    session: Session = Depends(get_db)
+) -> UserDB:
+    """
+    Validates JWT token and returns authenticated user.
+    Raises HTTPException with WWW-Authenticate header on failure.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},  # OAuth2 standard
+    )
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")  # Standard JWT claim
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = session.query(UserDB).filter(UserDB.username == username).first()
+    if user is None:
+        raise credentials_exception
+
+    return user
+```
+
+**Login endpoint pattern**:
+```python
+from fastapi.security import OAuth2PasswordRequestForm
+from datetime import timedelta
+
+@router.post("/token")
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_db)
+):
+    user = session.query(UserDB).filter(
+        UserDB.username == form_data.username
+    ).first()
+
+    if not user or not user.verify_password(form_data.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username},
+        expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
+```
+
+### Exception Handling Pattern
+
+**CRITICAL**: Follow FastAPI's minimalist exception handling approach.
+
+**DO**: Let HTTPException bubble up naturally
+```python
+@router.get("/customers/{customer_id}")
+def get_customer(
+    customer_id: int,
+    session: Session = Depends(get_db),
+    current_user: UserDB = Depends(get_current_user)
+):
+    customer = session.query(CustomerDB).filter(
+        CustomerDB.id == customer_id
+    ).first()
+
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Customer {customer_id} not found"
+        )
+
+    return customer
+    # FastAPI handles uncaught exceptions automatically
+```
+
+**DON'T**: Wrap every endpoint in generic try/except
+```python
+# ANTI-PATTERN - Violates minimalism principle
+@router.get("/customers/{customer_id}")
+def get_customer(customer_id: int, session: Session = Depends(get_db)):
+    try:
+        customer = session.query(CustomerDB).filter(...).first()
+        if not customer:
+            raise HTTPException(404, "Not found")
+        return customer
+    except HTTPException:
+        raise  # Unnecessary pass-through
+    except Exception as e:  # Too broad, masks real errors
+        logger.exception(f"Error fetching customer {customer_id}")
+        raise HTTPException(500, "Internal error")  # Loses valuable error info
+```
+
+**When to use try/except**:
+1. **External service failures** (S3, third-party APIs) - catch specific exceptions
+2. **Validation errors** - when you need custom error messages
+3. **Database integrity errors** - to provide user-friendly messages
+
+**Example - Proper exception handling for S3 operations**:
+```python
+from botocore.exceptions import ClientError
+
+@router.post("/upload/{customer_id}")
+def upload_file(
+    customer_id: int,
+    file: UploadFile,
+    session: Session = Depends(get_db)
+):
+    customer = session.query(CustomerDB).filter(
+        CustomerDB.id == customer_id
+    ).with_for_update().first()
+
+    if not customer:
+        raise HTTPException(404, "Customer not found")
+
+    try:
+        # S3 operation - catch specific exception
+        s3_url = s3_service.upload_file(file.file.read(), file.filename)
+        customer.document_url = s3_url
+        session.commit()
+        return {"url": s3_url}
+
+    except ClientError as e:
+        # Specific S3 error handling
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"File upload failed: {e.response['Error']['Message']}"
+        )
+    # No generic Exception handler - let FastAPI handle unexpected errors
 ```
 
 ### File Validation (Module-Level Functions)
@@ -406,13 +632,15 @@ def process_data(items: Dict[str, int]) -> Tuple[str, ...]:  # Don't use typing.
 ## Common Pitfalls to Avoid
 
 1. **Don't use old-style type hints** - Use `list[T]`, `dict[K, V]`, `X | None` (not `List`, `Dict`, `Optional`)
-2. **Don't cache S3Service instances** - Creates credential rotation issues
-3. **Don't split related DB operations** - Causes race conditions
-4. **Don't use os.getenv() with Pydantic Settings** - Defeats validation
-5. **Don't create classes with only static methods** - Use module-level functions
-6. **Don't add background workers/queues** - Keep it simple (best-effort is enough)
-7. **Don't forget with_for_update()** - Prevents concurrent modification issues
-8. **Don't use deprecated @app.on_event()** - Use lifespan context manager if needed
+2. **Don't wrap endpoints in generic try/except** - Let FastAPI handle exceptions; only catch specific ones (ClientError, IntegrityError)
+3. **Don't forget WWW-Authenticate header** - Include `headers={"WWW-Authenticate": "Bearer"}` in 401 responses
+4. **Don't cache S3Service instances** - Creates credential rotation issues
+5. **Don't split related DB operations** - Causes race conditions
+6. **Don't use os.getenv() with Pydantic Settings** - Defeats validation
+7. **Don't create classes with only static methods** - Use module-level functions
+8. **Don't add background workers/queues** - Keep it simple (best-effort is enough)
+9. **Don't forget with_for_update()** - Prevents concurrent modification issues
+10. **Don't use deprecated @app.on_event()** - Use lifespan context manager if needed
 
 ## Deployment Notes
 
@@ -459,7 +687,7 @@ Target: 75%+ code coverage
 **Three parallel jobs**:
 
 1. **test** (Python 3.14)
-   - Runs linting (ruff), formatting (black), type checking (mypy)
+   - Runs linting and formatting (ruff), type checking (mypy)
    - Executes unit, integration, and e2e tests with coverage
    - Uploads coverage to Codecov
    - Uses PostgreSQL 17 service container for integration tests
