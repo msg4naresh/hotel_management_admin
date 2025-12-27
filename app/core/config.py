@@ -1,5 +1,3 @@
-from typing import List
-
 from pydantic import AnyHttpUrl, computed_field
 from pydantic_settings import BaseSettings
 
@@ -8,8 +6,9 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Hotel Management Admin"
+    PORT: int = 8000  # Cloud Run compatibility
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
 
     # Security (SECRET_KEY required in production, has dev default)
     SECRET_KEY: str = "DEV-KEY-INSECURE-CHANGE-IN-PRODUCTION"
