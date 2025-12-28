@@ -1,19 +1,18 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import JSON, Column, Float, Integer, String
 
 from app.models.base import Base
 
 
 class RoomBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     name: str
     room_type: str
     floor: int
     capacity: int
     price_per_night: float
     amenities: list[str]
-
-    class Config:
-        from_attributes = True
 
 
 class RoomCreate(RoomBase):

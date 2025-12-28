@@ -20,6 +20,46 @@ FastAPI-based hotel management admin system with PostgreSQL database, AWS S3 doc
 
 ## Core Architecture
 
+### ORM Choice: SQLAlchemy vs SQLModel
+
+**Why SQLAlchemy over SQLModel?**
+
+This project uses **SQLAlchemy 2.0 + Pydantic** instead of SQLModel (the official FastAPI template's ORM). This decision was made for the following reasons:
+
+**SQLModel Advantages:**
+- Single model for both database and API validation (less duplication)
+- Simpler for basic CRUD operations
+- Tighter Pydantic integration out of the box
+
+**SQLAlchemy Advantages (Why We Chose It):**
+1. **Advanced Concurrency Control** - Critical for this application
+   - Full support for row-level locking (`with_for_update()`)
+   - Prevents race conditions in booking system (double-booking prevention)
+   - Essential for financial transactions and inventory management
+
+2. **Complex Query Support**
+   - Advanced joins and subqueries
+   - Custom SQL when needed
+   - Better performance optimization options
+
+3. **Flexibility & Separation of Concerns**
+   - Database models separate from API schemas
+   - Different validation rules for create/update/response
+   - Easier to evolve schemas independently
+
+4. **Production-Hardened**
+   - More mature ecosystem (20+ years)
+   - Better tooling and debugging support
+   - Extensive documentation for edge cases
+
+**Trade-off**: More code duplication (separate SQLAlchemy models and Pydantic schemas), but this is acceptable given the critical need for advanced concurrency control.
+
+**When to use SQLModel instead:**
+- Simple CRUD applications without complex transactions
+- Rapid prototyping
+- Applications that don't need row-level locking
+- Teams preferring minimalism over flexibility
+
 ### Request Flow (Critical Path)
 
 ```
@@ -156,9 +196,36 @@ uv run uvicorn app.main:app --reload
 # Interactive API documentation available at:
 # http://localhost:8000/docs (Swagger UI)
 # http://localhost:8000/redoc (ReDoc)
+```
 
-# Docker deployment
-docker compose up -d  # Exposes on http://localhost:8050
+### Docker Setup Options
+
+The project supports three development modes:
+
+**Hybrid Setup** (Recommended - Fast iteration):
+```bash
+# 1. Start only database in Docker
+docker compose up -d db
+
+# 2. Run app locally (hot-reload enabled)
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
+```
+
+**Full Docker Setup** (Production-like):
+```bash
+# Start all services (app + db)
+docker compose up -d
+# App available at http://localhost:8050
+```
+
+**Full Local Setup** (No Docker):
+```bash
+# Requires local PostgreSQL installation
+export PG_HOST=localhost PG_PORT=5432
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
 ```
 
 ### Testing
@@ -272,6 +339,67 @@ tests/
 └── e2e/                         # Test complete workflows
 ```
 
+## CRUD Pattern (Repository Layer)
+
+This project uses a **Repository Pattern** via CRUD base classes to encapsulate database operations:
+
+### CRUDBase Class (`app/crud/base.py`)
+
+Generic CRUD operations for all models:
+
+```python
+from app.crud import user, room  # Pre-instantiated CRUD objects
+
+# Standard operations available:
+user.get(db, id_)                    # Get single record
+user.get_multi(db, skip=0, limit=100) # Get multiple with pagination
+user.create(db, obj_in=user_create)   # Create new record
+user.update(db, db_obj=user, obj_in=updates)  # Update existing
+user.remove(db, id_=user_id)          # Delete record
+```
+
+### Custom CRUD Methods
+
+Entity-specific operations extend CRUDBase:
+
+```python
+# app/crud/crud_user.py
+class CRUDUser(CRUDBase[UserDB, UserCreate, UserUpdate]):
+    def authenticate(self, db: Session, username: str, password: str) -> UserDB | None:
+        # Custom authentication logic
+        user = self.get_by_username(db, username=username)
+        if not user or not user.verify_password(password):
+            return None
+        return user
+
+    def get_by_username(self, db: Session, username: str) -> UserDB | None:
+        return db.query(UserDB).filter(UserDB.username == username).first()
+
+# Usage in endpoints
+from app.crud import user as crud_user
+
+@router.post("/token")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = crud_user.authenticate(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(401, "Invalid credentials")
+```
+
+### When to Use CRUD vs Direct Queries
+
+- **Use CRUD**: For standard operations (get, create, update, delete, common queries)
+- **Use Direct Queries**: For complex joins, aggregations, or operations needing `with_for_update()`
+
+```python
+# GOOD - Use CRUD for simple operations
+user = crud_user.get(db, user_id)
+
+# GOOD - Use direct query for row locking
+customer = db.query(CustomerDB).filter(
+    CustomerDB.id == customer_id
+).with_for_update().first()
+```
+
 ## API Endpoints
 
 All prefixed with `/api/v1`:
@@ -284,7 +412,7 @@ All prefixed with `/api/v1`:
 - `GET /rooms`, `POST /create-room`
 - `GET /customers`, `POST /create-customer`
 - `GET /bookings`, `POST /create-booking`
-- `PATCH /bookings/{id}/check-in`, `PATCH /bookings/{id}/check-out`
+- `PATCH /bookings/{id}/check-in`, `PATCH /bookings/{id}/check-out`, `PATCH /bookings/{id}/cancel`
 
 **Documents**
 - `POST /upload-document/{customer_id}` - Upload to S3 (database-first pattern)
@@ -628,6 +756,33 @@ def process_data(items: Dict[str, int]) -> Tuple[str, ...]:  # Don't use typing.
 
 **Keep using `typing` for**:
 - `Any`, `TypeVar`, `Generic`, `Protocol`, `Literal`, `TypedDict`, `Callable`
+
+## Security Considerations
+
+**Authentication & Authorization**:
+- All JWT tokens expire after 30 minutes (configurable via `ACCESS_TOKEN_EXPIRE_MINUTES`)
+- Passwords hashed with bcrypt cost factor 12 (2^12 = 4,096 iterations)
+- Never commit `.env` files with real credentials
+- Always include `WWW-Authenticate: Bearer` header in 401 responses
+
+**File Upload Security**:
+- MIME type validation via magic bytes (not file extension)
+- Filename sanitization prevents path traversal attacks (`../../../etc/passwd`)
+- Maximum file size: 10MB (configurable via `MAX_FILE_SIZE`)
+- Allowed formats: PDF, JPEG, PNG only
+- Files stored in S3 with unique keys: `customer_proofs/{customer_id}/{timestamp}_{filename}`
+
+**Database Security**:
+- Use parameterized queries (SQLAlchemy prevents SQL injection)
+- Row-level locking (`with_for_update()`) prevents race conditions
+- Never expose internal error messages in production
+- Use transactions for multi-step operations
+
+**API Security**:
+- CORS configured via `BACKEND_CORS_ORIGINS` environment variable
+- All protected endpoints require valid JWT token
+- Input validation via Pydantic schemas
+- Rate limiting should be implemented at infrastructure level (load balancer/API gateway)
 
 ## Common Pitfalls to Avoid
 

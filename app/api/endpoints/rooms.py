@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.dependencies.common import CurrentUserDep, SessionDep
 from app.crud import room as crud_room
@@ -15,11 +15,15 @@ router = APIRouter()
     "/rooms",
     response_model=list[RoomResponse],
     summary="Get all rooms",
-    description="Retrieve a list of all available rooms",
+    description="Retrieve a paginated list of available rooms",
 )
-def get_rooms(current_user: CurrentUserDep, session: SessionDep):
-    rooms = crud_room.get_multi(session)
-    return rooms
+def get_rooms(
+    current_user: CurrentUserDep,
+    session: SessionDep,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+):
+    return crud_room.get_multi(session, skip=skip, limit=limit)
 
 
 @router.post(

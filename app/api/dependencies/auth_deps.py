@@ -19,7 +19,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Dep
     )
     try:
         # Decode and validate the token
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.VALIDATED_SECRET_KEY, algorithms=[settings.ALGORITHM])
 
         # Extract and validate claims
         username: str = payload.get("sub")
@@ -29,7 +29,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Dep
         # Validate token type
         token_type = payload.get("type")
         if token_type != "access_token":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         token_data = TokenData(username=username)
 

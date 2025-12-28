@@ -2,6 +2,93 @@
 
 Enterprise-grade FastAPI backend for hotel management with PostgreSQL, AWS S3, and production-ready features.
 
+---
+
+## 🐳 Docker Image Ready - Frontend Team Start Here!
+
+**Fully containerized backend - No Python/PostgreSQL installation needed!**
+
+### Quick Start (5 minutes)
+
+**Mac/Linux:**
+```bash
+git clone <repository-url>
+cd hotel_management_admin
+./start-backend.sh
+```
+
+**Windows:**
+```bash
+git clone <repository-url>
+cd hotel_management_admin
+start-backend.bat
+```
+
+### What You Get
+- ✅ **API running at:** http://localhost:8050/docs (Swagger UI)
+- ✅ **PostgreSQL database** pre-configured with migrations
+- ✅ **JWT authentication** ready to use
+- ✅ **CORS enabled** for local development (ports 3000, 5173, 8080)
+- ✅ **Zero backend setup** - Only Docker Desktop required
+
+### Test It Works
+```bash
+# Automated API tests (Mac/Linux)
+./test-api.sh
+
+# Manual test
+curl http://localhost:8050/api/v1/health
+```
+
+### 📚 Documentation for Frontend Team
+- **[FRONTEND_QUICKSTART.md](./FRONTEND_QUICKSTART.md)** - Complete setup guide with API examples
+- **[SHARE_WITH_FRONTEND.md](./SHARE_WITH_FRONTEND.md)** - Quick reference with integration code
+- **http://localhost:8050/docs** - Interactive API documentation
+
+### Integration Example
+```javascript
+// Login and get JWT token
+const response = await fetch('http://localhost:8050/api/v1/auth/token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({ username: 'user', password: 'pass' })
+});
+const { access_token } = await response.json();
+
+// Use token for protected endpoints
+const rooms = await fetch('http://localhost:8050/api/v1/rooms', {
+  headers: { 'Authorization': `Bearer ${access_token}` }
+});
+```
+
+### 🛠️ Common Docker Commands
+```bash
+# Start backend (builds image automatically on first run)
+docker compose up -d
+
+# Stop backend
+docker compose down
+
+# View logs (real-time)
+docker compose logs -f
+
+# Rebuild after backend code updates
+git pull && docker compose up -d --build
+
+# Manual build (optional - useful for testing)
+docker compose build web
+
+# Fresh start (⚠️ deletes all data)
+docker compose down -v && docker compose up -d
+
+# Access database
+docker compose exec db psql -U postgres -d hotel_management
+```
+
+**Note:** The Docker image builds automatically when you first run `./start-backend.sh` or `docker compose up -d`. First build takes ~3-5 minutes, subsequent builds are much faster (~30 seconds).
+
+---
+
 ## Features
 
 - **Authentication**: JWT-based OAuth2 authentication with secure password hashing

@@ -13,7 +13,7 @@ def create_access_token(subject: str | int, expires_delta: timedelta | None = No
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode = {"exp": expire, "iat": datetime.now(timezone.utc), "sub": str(subject), "type": "access_token"}
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.VALIDATED_SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 

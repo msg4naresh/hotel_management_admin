@@ -5,7 +5,7 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.dependencies.common import CurrentUserDep, S3ServiceDep, SessionDep
-from app.models.customer import CustomerDB
+from app.crud import customer as crud_customer
 from app.models.schemas.file_upload import DocumentDeleteResponse, FileUploadResponse
 from app.services import file_validator
 from app.services.s3_cleanup import delete_old_file_best_effort
@@ -51,7 +51,7 @@ async def upload_document(
         old_s3_key = None
 
         # Lock customer row for update
-        customer = session.query(CustomerDB).filter(CustomerDB.id == customer_id).with_for_update().first()
+        customer = crud_customer.get_with_lock(session, customer_id)
 
         if not customer:
             raise HTTPException(
@@ -82,6 +82,7 @@ async def upload_document(
         customer.uploaded_at = datetime.now(timezone.utc)
 
         session.commit()
+        session.refresh(customer)
 
         # 3. Best-effort cleanup of old file (after successful commit)
         if old_s3_key:
@@ -125,7 +126,7 @@ async def delete_document(
         # 1. Single transaction: get customer, extract S3 key, clear record
         s3_key = None
 
-        customer = session.query(CustomerDB).filter(CustomerDB.id == customer_id).with_for_update().first()
+        customer = crud_customer.get_with_lock(session, customer_id)
 
         if not customer:
             raise HTTPException(
@@ -153,6 +154,7 @@ async def delete_document(
         customer.proof_image_url = None
         customer.proof_image_filename = None
         session.commit()
+        session.refresh(customer)
 
         # 2. Best-effort cleanup (after successful commit)
         if s3_key:

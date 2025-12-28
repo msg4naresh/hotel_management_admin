@@ -1,13 +1,15 @@
 import re
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import Column, DateTime, Integer, String
 
 from app.models.base import Base
 
 
 class CustomerBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     name: str
     email: str
     phone: str
@@ -15,9 +17,6 @@ class CustomerBase(BaseModel):
     proof_of_identity: str
     proof_image_url: str | None = None
     proof_image_filename: str | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class CustomerCreate(CustomerBase):

@@ -1,5 +1,16 @@
-from pydantic import AnyHttpUrl, computed_field
+from typing import Annotated, Any
+
+from pydantic import AnyHttpUrl, BeforeValidator, computed_field
 from pydantic_settings import BaseSettings
+
+
+def parse_cors(v: Any) -> list[str] | str:
+    """Parse CORS origins from comma-separated string or list (FastAPI template pattern)"""
+    if isinstance(v, str) and not v.startswith("["):
+        return [i.strip() for i in v.split(",") if i.strip()]
+    elif isinstance(v, list | str):
+        return v
+    raise ValueError(v)
 
 
 class Settings(BaseSettings):
@@ -7,13 +18,16 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Hotel Management Admin"
     PORT: int = 8000  # Cloud Run compatibility
-    # CORS
-    BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
 
-    # Security (SECRET_KEY required in production, has dev default)
-    SECRET_KEY: str = "DEV-KEY-INSECURE-CHANGE-IN-PRODUCTION"
+    # CORS - Supports both comma-separated string and list formats
+    BACKEND_CORS_ORIGINS: Annotated[list[AnyHttpUrl] | str, BeforeValidator(parse_cors)] = []
+
+    # Security (SECRET_KEY required, no default for production safety)
+    SECRET_KEY: str = ""  # Must be set via environment variable
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    # Internal dev-only fallback (only used if TESTING=True)
+    _DEV_SECRET_KEY: str = "DEV-KEY-INSECURE-TESTING-ONLY"
 
     # Database Configuration
     PG_HOST: str = "localhost"
@@ -45,6 +59,27 @@ class Settings(BaseSettings):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         return f"postgresql+psycopg2://{self.PG_USERNAME}:{self.PG_PASSWORD}@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DB}?options=-csearch_path%3D{self.PG_SCHEMA}"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def VALIDATED_SECRET_KEY(self) -> str:
+        """Validate SECRET_KEY and prevent production usage of dev key"""
+        if not self.SECRET_KEY:
+            if self.TESTING:
+                return self._DEV_SECRET_KEY
+            raise ValueError("SECRET_KEY must be set in production environment")
+
+        # Prevent default "changethis" value (FastAPI template pattern)
+        if self.SECRET_KEY == "changethis" and self.ENVIRONMENT == "production":
+            raise ValueError("Cannot use default SECRET_KEY 'changethis' in production")
+
+        if self.SECRET_KEY == self._DEV_SECRET_KEY and self.ENVIRONMENT == "production":
+            raise ValueError("Cannot use development SECRET_KEY in production")
+
+        if len(self.SECRET_KEY) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters")
+
+        return self.SECRET_KEY
 
     class Config:
         env_file = ".env"

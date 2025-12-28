@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import relationship
 
@@ -12,12 +13,12 @@ class BookingDB(Base):
     __tablename__ = "bookings"
 
     id = Column(Integer, primary_key=True, index=True)
-    room_id = Column(Integer, ForeignKey("rooms.id"))
-    customer_id = Column(Integer, ForeignKey("customers.id"))
+    room_id = Column(Integer, ForeignKey("rooms.id", ondelete="RESTRICT"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
 
     # Booking dates
-    scheduled_check_in = Column(Date)  # Original planned check-in
-    scheduled_check_out = Column(Date)  # Original planned check-out
+    scheduled_check_in = Column(Date, nullable=False)  # Original planned check-in
+    scheduled_check_out = Column(Date, nullable=False)  # Original planned check-out
     actual_check_in = Column(DateTime, nullable=True)  # Actual check-in time
     actual_check_out = Column(DateTime, nullable=True)  # Actual check-out time
 
@@ -26,58 +27,36 @@ class BookingDB(Base):
     payment_status = Column(String, default=PaymentStatus.PENDING.value)
 
     # Payment tracking
-    total_amount = Column(Numeric(10, 2))
+    total_amount = Column(Numeric(10, 2), nullable=False)
     amount_paid = Column(Numeric(10, 2), default=0)
 
     # Additional charges (for late check-out etc.)
     additional_charges = Column(Numeric(10, 2), default=0)
     notes = Column(String, nullable=True)
 
-    booking_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    booking_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False
     )
 
     # Relationships
     room = relationship("RoomDB")
     customer = relationship("CustomerDB")
 
-    @classmethod
-    def is_room_occupied(cls, session, room_id: int, check_in_date: date, check_out_date: date) -> bool:
-        """
-        Check if room has any current occupants or bookings for a specific date
-        Args:
-            session: Database session
-            room_id: ID of the room to check
-            check_date: Optional specific date to check (defaults to today)
-        """
-        return (
-            session.query(cls)
-            .filter(
-                cls.room_id == room_id,
-                cls.booking_status.in_(
-                    [BookingStatus.CHECKED_IN.value, BookingStatus.CONFIRMED.value, BookingStatus.PREBOOKED.value]
-                ),
-                # Check if there's any overlap with existing bookings
-                cls.scheduled_check_in < check_out_date,
-                cls.scheduled_check_out > check_in_date,
-            )
-            .first()
-            is not None
-        )
-
 
 class BookingCreate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     room_id: int
     customer_id: int
     scheduled_check_in: date
     scheduled_check_out: date
     payment_status: PaymentStatus
     booking_status: BookingStatus
-    total_amount: float
-    amount_paid: float
-    additional_charges: float
-    notes: str | None
+    total_amount: Decimal = Field(decimal_places=2, gt=0)
+    amount_paid: Decimal = Field(decimal_places=2, ge=0)
+    additional_charges: Decimal = Field(decimal_places=2, ge=0, default=Decimal("0.00"))
+    notes: str | None = None
 
     @field_validator("scheduled_check_in")
     @classmethod
@@ -94,24 +73,17 @@ class BookingCreate(BaseModel):
             raise ValueError("Check-out date must be after check-in date")
         return v
 
-    @field_validator("amount_paid")
-    @classmethod
-    def amount_paid_validation(cls, v, info):
-        if v < 0:
-            raise ValueError("Amount paid cannot be negative")
-        if "total_amount" in info.data and v > info.data["total_amount"]:
+    @model_validator(mode="after")
+    def validate_payment_amounts(self) -> "BookingCreate":
+        """Validate that amount_paid doesn't exceed total_amount."""
+        if self.amount_paid > self.total_amount:
             raise ValueError("Amount paid cannot exceed total amount")
-        return v
-
-    @field_validator("total_amount")
-    @classmethod
-    def total_amount_validation(cls, v):
-        if v <= 0:
-            raise ValueError("Total amount must be greater than zero")
-        return v
+        return self
 
 
 class BookingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     room_id: int
     customer_id: int
@@ -121,11 +93,8 @@ class BookingResponse(BaseModel):
     actual_check_out: datetime | None
     booking_status: str
     payment_status: str
-    total_amount: float
-    amount_paid: float
-    additional_charges: float
+    total_amount: Decimal
+    amount_paid: Decimal
+    additional_charges: Decimal
     notes: str | None
     booking_date: datetime
-
-    class Config:
-        from_attributes = True

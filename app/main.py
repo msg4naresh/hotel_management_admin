@@ -1,7 +1,9 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import api_router
 from app.core.config import settings
@@ -9,6 +11,29 @@ from app.core.logging import setup_logging
 
 # Initialize logging
 setup_logging()
+
+logger = logging.getLogger(__name__)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware to add security headers to all responses"""
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        # Security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+
+        # HSTS only in production with HTTPS
+        if settings.ENVIRONMENT == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+        # CSP: restrictive for API (no inline scripts)
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+
+        return response
+
 
 # Initialize Sentry for error tracking (only if DSN is configured)
 if settings.SENTRY_DSN:
@@ -30,7 +55,20 @@ if settings.SENTRY_DSN:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: logging is already set up, can add DB checks here
+    # Startup: validate critical security settings
+    try:
+        _ = settings.VALIDATED_SECRET_KEY  # Raises if invalid
+        logger.info("SECRET_KEY validation passed")
+    except ValueError as e:
+        logger.error(f"SECRET_KEY validation failed: {e}")
+        raise
+
+    if not settings.AWS_ACCESS_KEY_ID or not settings.AWS_SECRET_ACCESS_KEY:
+        if settings.ENVIRONMENT == "production":
+            logger.error("AWS credentials must be configured in production")
+            raise ValueError("AWS credentials must be configured in production")
+        logger.warning("AWS credentials not configured - S3 operations will fail")
+
     yield
     # Shutdown: cleanup if needed
 
@@ -44,14 +82,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[str(origin).rstrip("/") for origin in settings.BACKEND_CORS_ORIGINS],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "Accept"],
+        expose_headers=["Content-Type", "X-Total-Count"],
     )
 
 # Include the API router

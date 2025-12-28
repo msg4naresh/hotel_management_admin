@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/health")
-async def health():
+def health():
     """Liveness probe - is the service running?"""
     return {"status": "ok"}
 
