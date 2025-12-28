@@ -98,3 +98,4 @@ class BookingResponse(BaseModel):
     additional_charges: Decimal
     notes: str | None
     booking_date: datetime
+    updated_at: datetime

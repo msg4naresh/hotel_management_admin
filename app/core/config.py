@@ -20,7 +20,15 @@ class Settings(BaseSettings):
     PORT: int = 8000  # Cloud Run compatibility
 
     # CORS - Supports both comma-separated string and list formats
-    BACKEND_CORS_ORIGINS: Annotated[list[AnyHttpUrl] | str, BeforeValidator(parse_cors)] = []
+    # Default includes all common development origins for React Native/Expo
+    BACKEND_CORS_ORIGINS: Annotated[list[AnyHttpUrl] | str, BeforeValidator(parse_cors)] = [
+        "http://localhost:3000",      # React/Next.js default
+        "http://localhost:8080",      # Alternative dev port
+        "http://localhost:19000",     # Expo default
+        "http://localhost:19001",     # Expo alternative
+        "http://localhost:19006",     # Expo web
+        "http://localhost:8081",      # Metro bundler
+    ]
 
     # Security (SECRET_KEY required, no default for production safety)
     SECRET_KEY: str = ""  # Must be set via environment variable
