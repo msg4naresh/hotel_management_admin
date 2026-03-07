@@ -7,28 +7,27 @@ async def test_create_room(client: AsyncClient, admin_auth_headers: dict):
     response = await client.post(
         "/api/v1/create-room",
         json={
-            "name": "Ocean View 101",
-            "room_type": "Suite",
-            "floor": 1,
+            "room_number": "102",
+            "building": "building_1",
             "capacity": 2,
-            "price_per_night": 300.0,
-            "amenities": ["WiFi", "Jacuzzi"],
+            "room_type": "delux",
+            "ac": True,
         },
         headers=admin_auth_headers,
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["name"] == "Ocean View 101"
-    assert data["price_per_night"] == 300.0
-    assert "Jacuzzi" in data["amenities"]
+    assert data["room_number"] == "102"
+    assert data["building"] == "building_1"
+    assert data["ac"] is True
 
 
 @pytest.mark.integration
 async def test_create_room_invalid_data(client: AsyncClient, admin_auth_headers: dict):
-    # Missing required field "name"
+    # Missing required field "room_number"
     response = await client.post(
         "/api/v1/create-room",
-        json={"room_type": "Suite", "floor": 1, "capacity": 2, "price_per_night": 300.0},
+        json={"building": "building_1", "capacity": 2, "room_type": "delux"},
         headers=admin_auth_headers,
     )
     assert response.status_code == 422

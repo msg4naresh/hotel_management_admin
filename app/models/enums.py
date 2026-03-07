@@ -15,3 +15,22 @@ class PaymentStatus(str, Enum):
     PARTIAL = "partial"
     PAID = "paid"
     REFUNDED = "refunded"
+
+
+class Building(str, Enum):
+    BUILDING_1 = "building_1"
+    BUILDING_2 = "building_2"
+    BUILDING_3 = "building_3"
+
+
+class RoomType(str, Enum):
+    SINGLE = "single"
+    DOUBLE = "double"
+    DELUX = "delux"
+    PREMIUM = "premium"
+
+
+class RoomStatus(str, Enum):
+    AVAILABLE = "available"
+    NOT_AVAILABLE = "not_available"
+    NOT_CLEANED = "not_cleaned"

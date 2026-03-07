@@ -175,12 +175,11 @@ def test_room(db):
     from app.models.rooms import RoomDB
 
     room = RoomDB(
-        name="Deluxe Suite",
-        room_type="Suite",
-        floor=5,
+        room_number="101",
+        building="building_1",
         capacity=2,
-        price_per_night=250.00,
-        amenities=["WiFi", "AC", "TV"],
+        room_type="delux",
+        ac=True,
     )
     db.add(room)
     db.commit()

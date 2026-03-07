@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies.common import CurrentUserDep, SessionDep
 from app.crud import customer as crud_customer
-from app.models.customer import CustomerCreate, CustomerResponse
+from app.models.customer import CustomerCreate, CustomerResponse, CustomerUpdate
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -35,5 +35,29 @@ def get_customers(
 def create_customer(customer: CustomerCreate, current_user: CurrentUserDep, session: SessionDep):
     try:
         return crud_customer.create(session, obj_in=customer)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put(
+    "/customers/{customer_id}",
+    response_model=CustomerResponse,
+    summary="Update a customer",
+    description="Update an existing customer's details",
+)
+def update_customer(
+    customer_id: int,
+    customer_update: CustomerUpdate,
+    current_user: CurrentUserDep,
+    session: SessionDep,
+):
+    db_customer = crud_customer.get(session, customer_id)
+    if not db_customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Customer with ID {customer_id} not found",
+        )
+    try:
+        return crud_customer.update(session, db_obj=db_customer, obj_in=customer_update)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

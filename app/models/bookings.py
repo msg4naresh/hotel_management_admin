@@ -19,8 +19,12 @@ class BookingDB(Base):
     # Booking dates
     scheduled_check_in = Column(Date, nullable=False)  # Original planned check-in
     scheduled_check_out = Column(Date, nullable=False)  # Original planned check-out
-    actual_check_in = Column(DateTime, nullable=True)  # Actual check-in time
-    actual_check_out = Column(DateTime, nullable=True)  # Actual check-out time
+    scheduled_check_in_time = Column(String(10), nullable=True)  # e.g. "12:00 PM"
+    scheduled_check_out_time = Column(String(10), nullable=True)  # e.g. "11:00 AM"
+    actual_check_in = Column(Date, nullable=True)  # Actual check-in date
+    actual_check_out = Column(Date, nullable=True)  # Actual check-out date
+    actual_check_in_time = Column(String(10), nullable=True)  # Rounded hour e.g. "1 PM"
+    actual_check_out_time = Column(String(10), nullable=True)  # Rounded hour e.g. "11 AM"
 
     # Status tracking
     booking_status = Column(String, default=BookingStatus.PREBOOKED.value)
@@ -32,6 +36,7 @@ class BookingDB(Base):
 
     # Additional charges (for late check-out etc.)
     additional_charges = Column(Numeric(10, 2), default=0)
+    refundable_amount = Column(Numeric(10, 2), default=0)
     notes = Column(String, nullable=True)
 
     booking_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -51,11 +56,14 @@ class BookingCreate(BaseModel):
     customer_id: int
     scheduled_check_in: date
     scheduled_check_out: date
+    scheduled_check_in_time: str | None = None
+    scheduled_check_out_time: str | None = None
     payment_status: PaymentStatus
     booking_status: BookingStatus
     total_amount: Decimal = Field(decimal_places=2, gt=0)
     amount_paid: Decimal = Field(decimal_places=2, ge=0)
     additional_charges: Decimal = Field(decimal_places=2, ge=0, default=Decimal("0.00"))
+    refundable_amount: Decimal = Field(decimal_places=2, ge=0, default=Decimal("0.00"))
     notes: str | None = None
 
     @field_validator("scheduled_check_in")
@@ -89,13 +97,30 @@ class BookingResponse(BaseModel):
     customer_id: int
     scheduled_check_in: date
     scheduled_check_out: date
-    actual_check_in: datetime | None
-    actual_check_out: datetime | None
+    scheduled_check_in_time: str | None
+    scheduled_check_out_time: str | None
+    actual_check_in: date | None
+    actual_check_out: date | None
+    actual_check_in_time: str | None
+    actual_check_out_time: str | None
     booking_status: str
     payment_status: str
     total_amount: Decimal
     amount_paid: Decimal
     additional_charges: Decimal
+    refundable_amount: Decimal | None
     notes: str | None
     booking_date: datetime
     updated_at: datetime
+
+
+class PaginatedBookingResponse(BaseModel):
+    """Paginated response with booking records and metadata."""
+
+    data: list[BookingResponse]
+    page: int
+    per_page: int
+    total_records: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool

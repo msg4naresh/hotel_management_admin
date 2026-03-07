@@ -49,13 +49,52 @@ class CustomerResponse(CustomerBase):
     id: int
 
 
+class CustomerUpdate(BaseModel):
+    """Schema for updating customer details. All fields optional."""
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    proof_of_identity: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def email_validator(cls, v):
+        if v is not None:
+            if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", v):
+                raise ValueError("Invalid email format")
+            return v.lower()
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def phone_validator(cls, v):
+        if v is not None:
+            cleaned = re.sub(r"[\s\-\(\)\.]", "", v)
+            if not cleaned.isdigit() or len(cleaned) < 10:
+                raise ValueError("Phone must contain at least 10 digits")
+            return cleaned
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def name_validator(cls, v):
+        if v is not None:
+            if len(v.strip()) < 2:
+                raise ValueError("Name must be at least 2 characters")
+            return v.strip()
+        return v
+
+
 class CustomerDB(Base):
     __tablename__ = "customers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     email = Column(String(50), unique=True, index=True, nullable=False)
-    phone = Column(String(20), nullable=False)
+    phone = Column(String(20), unique=True, index=True, nullable=False)
     address = Column(String(200), nullable=False)
     proof_of_identity = Column(String(200), nullable=False)
     proof_image_url = Column(String(500), nullable=True)

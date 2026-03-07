@@ -17,6 +17,7 @@ from app.db.postgres_db import get_database_uri
 from app.models import (
     bookings,  # noqa
     customer,  # noqa
+    refresh_token,  # noqa
     rooms,  # noqa
     users,  # noqa
 )

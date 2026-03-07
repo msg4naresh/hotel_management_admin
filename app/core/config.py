@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""  # Must be set via environment variable
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     # Internal dev-only fallback (only used if TESTING=True)
     _DEV_SECRET_KEY: str = "DEV-KEY-INSECURE-TESTING-ONLY"
 
@@ -51,10 +52,34 @@ class Settings(BaseSettings):
     AWS_S3_BUCKET_NAME: str = "hotel-management-uploads"
     AWS_S3_REGION: str = "us-east-1"
 
+    # Storage mode: "local" for local filesystem, "s3" for AWS S3
+    # Auto-detected if not set: uses "local" when AWS creds are empty/dummy
+    STORAGE_MODE: str = "auto"
+
+    # Local file storage (used when STORAGE_MODE=local)
+    LOCAL_UPLOAD_DIR: str = "/app/uploads"
+    LOCAL_UPLOAD_BASE_URL: str = ""  # Set at runtime based on host/port
+
     # File Upload Configuration
     MAX_FILE_SIZE: int = 10485760  # 10MB
     ALLOWED_FILE_TYPES: list[str] = ["application/pdf", "image/jpeg", "image/png"]
     ALLOWED_EXTENSIONS: list[str] = ["pdf", "jpg", "jpeg", "png"]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def RESOLVED_STORAGE_MODE(self) -> str:
+        """Resolve storage mode: auto-detect when set to 'auto'."""
+        if self.STORAGE_MODE.lower() in ("local", "s3"):
+            return self.STORAGE_MODE.lower()
+        # auto: use S3 only if real credentials are provided
+        if (
+            self.AWS_ACCESS_KEY_ID
+            and self.AWS_SECRET_ACCESS_KEY
+            and self.AWS_ACCESS_KEY_ID not in ("", "dummy")
+            and self.AWS_SECRET_ACCESS_KEY not in ("", "dummy")
+        ):
+            return "s3"
+        return "local"
 
     # Testing flag
     TESTING: bool = False  # Default to production mode

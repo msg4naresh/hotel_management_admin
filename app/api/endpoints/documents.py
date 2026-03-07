@@ -66,11 +66,17 @@ async def upload_document(
             except ValueError:
                 logger.warning(f"Invalid old S3 URL: {customer.proof_image_url}")
 
-        # Upload new file to S3 (within transaction lock)
+        # Upload new file to storage (S3 or local, depending on config)
         try:
             new_s3_url = s3_service.upload_file(file_content, safe_filename, customer_id, content_type)
         except ClientError as e:
             logger.error(f"AWS S3 error uploading document: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="File upload service temporarily unavailable",
+            ) from e
+        except OSError as e:
+            logger.error(f"Local storage error uploading document: {e}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="File upload service temporarily unavailable",

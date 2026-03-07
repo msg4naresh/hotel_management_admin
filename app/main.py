@@ -1,8 +1,10 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.routes import api_router
@@ -29,8 +31,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if settings.ENVIRONMENT == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
-        # CSP: restrictive for API (no inline scripts)
-        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        # CSP: Allow Swagger UI resources in development, restrictive in production
+        if settings.ENVIRONMENT == "development":
+            # Allow Swagger UI CDN resources and inline scripts for /docs endpoints
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' https://fastapi.tiangolo.com data:; "
+                "frame-ancestors 'none'"
+            )
+        else:
+            # Restrictive CSP for production API
+            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
 
         return response
 
@@ -63,11 +76,23 @@ async def lifespan(app: FastAPI):
         logger.error(f"SECRET_KEY validation failed: {e}")
         raise
 
-    if not settings.AWS_ACCESS_KEY_ID or not settings.AWS_SECRET_ACCESS_KEY:
-        if settings.ENVIRONMENT == "production":
-            logger.error("AWS credentials must be configured in production")
-            raise ValueError("AWS credentials must be configured in production")
-        logger.warning("AWS credentials not configured - S3 operations will fail")
+    storage_mode = settings.RESOLVED_STORAGE_MODE
+    logger.info(f"Storage mode: {storage_mode}")
+
+    if storage_mode == "s3":
+        if not settings.AWS_ACCESS_KEY_ID or not settings.AWS_SECRET_ACCESS_KEY:
+            if settings.ENVIRONMENT == "production":
+                logger.error("AWS credentials must be configured in production")
+                raise ValueError("AWS credentials must be configured in production")
+            logger.warning("AWS credentials not configured - S3 operations will fail")
+    else:
+        # Local storage — ensure upload directory exists
+        upload_dir = Path(settings.LOCAL_UPLOAD_DIR)
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        # Set the base URL for serving static uploads if not explicitly set
+        if not settings.LOCAL_UPLOAD_BASE_URL:
+            settings.LOCAL_UPLOAD_BASE_URL = f"http://0.0.0.0:{settings.PORT}/uploads"
+        logger.info(f"Local uploads dir: {upload_dir} | URL: {settings.LOCAL_UPLOAD_BASE_URL}")
 
     yield
     # Shutdown: cleanup if needed
@@ -98,6 +123,12 @@ if settings.BACKEND_CORS_ORIGINS:
 
 # Include the API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Mount local upload directory as static files when using local storage
+if settings.RESOLVED_STORAGE_MODE == "local":
+    _upload_dir = Path(settings.LOCAL_UPLOAD_DIR)
+    _upload_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(_upload_dir)), name="uploads")
 
 
 @app.get("/")

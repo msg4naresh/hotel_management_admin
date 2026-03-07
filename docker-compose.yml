@@ -5,6 +5,8 @@ services:
       - "8050:8080"
     environment:
       - PORT=8080
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-for-frontend-testing-only}
       - PG_HOST=db
       - PG_PORT=5432
       - PG_USERNAME=postgres
@@ -16,6 +18,11 @@ services:
       - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-hotel-management-uploads}
       - AWS_S3_REGION=${AWS_S3_REGION:-us-east-1}
       - MAX_FILE_SIZE=${MAX_FILE_SIZE:-10485760}
+      - STORAGE_MODE=${STORAGE_MODE:-auto}
+      - LOCAL_UPLOAD_DIR=/app/uploads
+      - LOCAL_UPLOAD_BASE_URL=http://Mohans-MacBook-Pro.local:8050/uploads
+    volumes:
+      - upload_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -24,6 +31,7 @@ services:
     image: postgres:17
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -39,3 +47,4 @@ services:
 
 volumes:
   postgres_data:
+  upload_data:

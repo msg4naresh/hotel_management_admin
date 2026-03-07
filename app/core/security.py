@@ -17,6 +17,14 @@ def create_access_token(subject: str | int, expires_delta: timedelta | None = No
     return encoded_jwt
 
 
+def create_refresh_token(subject: str | int) -> tuple[str, datetime]:
+    """Create a refresh token. Returns (token_string, expiry_datetime)."""
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode = {"exp": expire, "iat": datetime.now(timezone.utc), "sub": str(subject), "type": "refresh_token"}
+    encoded_jwt = jwt.encode(to_encode, settings.VALIDATED_SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt, expire
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a bcrypt hash"""
     try:

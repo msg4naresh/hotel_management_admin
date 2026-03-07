@@ -1,3 +1,4 @@
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,14 @@ class CRUDUser(CRUDBase[UserDB, UserCreate, UserResponse]):
     def get_by_username(self, db: Session, *, username: str) -> UserDB | None:
         return db.query(UserDB).filter(UserDB.username == username).first()
 
+    def get_by_email(self, db: Session, *, email: str) -> UserDB | None:
+        return db.query(UserDB).filter(UserDB.email == email).first()
+
+    def get_by_username_or_email(self, db: Session, *, login: str) -> UserDB | None:
+        return db.query(UserDB).filter(
+            or_(UserDB.username == login, UserDB.email == login)
+        ).first()
+
     def create(self, db: Session, *, obj_in: UserCreate) -> UserDB:
         # Check for existing username with pessimistic lock to prevent race condition
         existing = db.query(UserDB).filter(UserDB.username == obj_in.username).with_for_update().first()
@@ -24,9 +33,16 @@ class CRUDUser(CRUDBase[UserDB, UserCreate, UserResponse]):
         if existing:
             raise ValueError(f"Username {obj_in.username} already exists")
 
+        # Check for existing email if provided
+        if obj_in.email:
+            existing_email = db.query(UserDB).filter(UserDB.email == obj_in.email).with_for_update().first()
+            if existing_email:
+                raise ValueError(f"Email {obj_in.email} already exists")
+
         # Create new user
         db_obj = UserDB(
             username=obj_in.username,
+            email=obj_in.email,
             hashed_password=get_password_hash(obj_in.password),
             is_active=True,
         )
@@ -42,7 +58,7 @@ class CRUDUser(CRUDBase[UserDB, UserCreate, UserResponse]):
             raise ValueError(f"Username {obj_in.username} already exists")
 
     def authenticate(self, db: Session, *, username: str, password: str) -> UserDB | None:
-        user = self.get_by_username(db, username=username)
+        user = self.get_by_username_or_email(db, login=username)
         if not user:
             return None
         if not verify_password(password, user.hashed_password):

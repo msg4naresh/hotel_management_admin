@@ -1,11 +1,20 @@
+-- Users table for authentication
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS rooms (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    room_type VARCHAR(50) NOT NULL,
-    floor INTEGER NOT NULL,
-    capacity INTEGER NOT NULL,
-    price_per_night DOUBLE PRECISION NOT NULL,
-    amenities JSONB NOT NULL
+    room_number VARCHAR(20) NOT NULL,
+    building VARCHAR(20) NOT NULL,
+    capacity INTEGER NOT NULL CHECK (capacity >= 1 AND capacity <= 8),
+    room_type VARCHAR(20) NOT NULL,
+    ac BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS customers (

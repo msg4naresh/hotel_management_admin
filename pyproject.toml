@@ -21,40 +21,32 @@ dependencies = [
     "fastapi>=0.115.0",  # Latest with lifespan, improved performance
     "uvicorn[standard]>=0.32.0",
     "starlette>=0.41.0",
-
     # Database
     "sqlalchemy>=2.0.36",
     "psycopg2-binary>=2.9.10",
     "alembic>=1.14.0",
-
     # Data Validation (Pydantic v2 with all features)
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "typing-extensions>=4.12.0",
-
     # Environment
     "python-dotenv>=1.0.0",
-
     # Security & Auth
     "passlib[bcrypt]>=1.7.4",
     "python-jose[cryptography]>=3.3.0",
     "python-multipart>=0.0.6",
-
     # AWS Integration
     "boto3>=1.35.0",
     "botocore>=1.32.0",
-
     # File Processing
     "python-magic>=0.4.24",
-
     # Logging
     "python-json-logger>=2.0.7",
-
     # Utilities
     "tenacity>=8.2.0",  # Retry logic for pre-start checks
-    
     # Monitoring (optional, only initializes if SENTRY_DSN is set)
     "sentry-sdk[fastapi]>=1.40.0",
+    "email-validator>=2.3.0",
 ]
 
 [project.optional-dependencies]
