@@ -12,7 +12,7 @@ from app.api.dependencies.common import CurrentUserDep, SessionDep
 from app.crud import booking as crud_booking
 from app.models.bookings import BookingCreate, BookingDB, BookingResponse, PaginatedBookingResponse
 from app.models.customer import CustomerDB
-from app.models.enums import BookingStatus, PaymentStatus
+from app.models.enums import BookingStatus, PaymentStatus, RoomStatus
 from app.models.rooms import RoomDB
 
 logger = logging.getLogger(__name__)
@@ -254,6 +254,12 @@ def check_out(booking_id: int, body: PaidAmountRequest, current_user: CurrentUse
     booking.actual_check_out_time = now.strftime("%I:%M %p").lstrip("0")  # e.g. "2:00 PM", "11:00 AM"
     booking.amount_paid = body.paid_amount
     booking.booking_status = BookingStatus.CHECKED_OUT.value
+
+    # Mark the room as not cleaned
+    room = session.query(RoomDB).filter(RoomDB.id == booking.room_id).first()
+    if room:
+        room.status = RoomStatus.NOT_CLEANED.value
+
     session.commit()
     session.refresh(booking)
 
